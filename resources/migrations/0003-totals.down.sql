@@ -1,0 +1,17 @@
+DROP TABLE totals CASCADE;
+--;;
+DROP FUNCTION init_person_totals CASCADE;
+--;;
+DROP FUNCTION init_category_totals CASCADE;
+--;;
+DROP FUNCTION update_transaction_totals CASCADE;
+--;;
+DROP FUNCTION aggregate_transaction CASCADE;
+--;;
+DROP FUNCTION update_split_totals CASCADE;
+--;;
+DROP FUNCTION aggregate_split CASCADE;
+--;;
+DROP VIEW dynamic_totals;
+--;;
+DROP FUNCTION reset_totals;
