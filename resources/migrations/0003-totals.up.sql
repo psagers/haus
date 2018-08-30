@@ -51,14 +51,9 @@ $$ LANGUAGE SQL;
 
 --;;
 
-CREATE OR REPLACE FUNCTION update_transaction_totals() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION update_transaction_totals_pre() RETURNS trigger AS $$
     BEGIN
-        IF (TG_OP = 'INSERT') OR (TG_OP = 'UPDATE') THEN
-            PERFORM aggregate_transaction(NEW);
-        END IF;
-        IF (TG_OP = 'UPDATE') OR (TG_OP = 'DELETE') THEN
-            PERFORM aggregate_transaction(OLD, factor => -1);
-        END IF;
+        PERFORM aggregate_transaction(OLD, factor => -1);
 
         IF TG_OP = 'DELETE' THEN
             RETURN OLD;
@@ -70,13 +65,23 @@ $$ LANGUAGE plpgsql;
 
 --;;
 
-CREATE TRIGGER update_transaction_totals_1 AFTER INSERT OR UPDATE ON transactions
-    FOR EACH ROW EXECUTE PROCEDURE update_transaction_totals();
+CREATE OR REPLACE FUNCTION update_transaction_totals_post() RETURNS trigger AS $$
+    BEGIN
+        PERFORM aggregate_transaction(NEW);
+
+        RETURN NULL;
+    END
+$$ LANGUAGE plpgsql;
 
 --;;
 
-CREATE TRIGGER update_transaction_totals_2 BEFORE DELETE ON transactions
-    FOR EACH ROW EXECUTE PROCEDURE update_transaction_totals();
+CREATE TRIGGER update_transaction_totals_pre BEFORE UPDATE OR DELETE ON transactions
+    FOR EACH ROW EXECUTE PROCEDURE update_transaction_totals_pre();
+
+--;;
+
+CREATE TRIGGER update_transaction_totals_post AFTER INSERT OR UPDATE ON transactions
+    FOR EACH ROW EXECUTE PROCEDURE update_transaction_totals_post();
 
 --;;
 
@@ -89,14 +94,9 @@ $$ LANGUAGE SQL;
 
 --;;
 
-CREATE OR REPLACE FUNCTION update_split_totals() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION update_split_totals_pre() RETURNS trigger AS $$
     BEGIN
-        IF (TG_OP = 'INSERT') OR (TG_OP = 'UPDATE') THEN
-            PERFORM aggregate_split(NEW);
-        END IF;
-        IF (TG_OP = 'UPDATE') OR (TG_OP = 'DELETE') THEN
-            PERFORM aggregate_split(OLD, factor => -1);
-        END IF;
+        PERFORM aggregate_split(OLD, factor => -1);
 
         IF TG_OP = 'DELETE' THEN
             RETURN OLD;
@@ -108,8 +108,23 @@ $$ LANGUAGE plpgsql;
 
 --;;
 
-CREATE TRIGGER update_split_totals AFTER INSERT OR UPDATE OR DELETE ON splits
-    FOR EACH ROW EXECUTE PROCEDURE update_split_totals();
+CREATE OR REPLACE FUNCTION update_split_totals_post() RETURNS trigger AS $$
+    BEGIN
+        PERFORM aggregate_split(NEW);
+
+        RETURN NULL;
+    END
+$$ LANGUAGE plpgsql;
+
+--;;
+
+CREATE TRIGGER update_split_totals_pre BEFORE UPDATE OR DELETE ON splits
+    FOR EACH ROW EXECUTE PROCEDURE update_split_totals_pre();
+
+--;;
+
+CREATE TRIGGER update_split_totals_post AFTER INSERT OR UPDATE ON splits
+    FOR EACH ROW EXECUTE PROCEDURE update_split_totals_post();
 
 --;;
 

@@ -3,8 +3,6 @@ pom.xml
 pom.xml.asc
 *.jar
 *.class
-.gitignore
-.git/**
 
 syntax: regexp
 ^.nrepl-port
@@ -12,3 +10,4 @@ syntax: regexp
 ^target/
 ^classes/
 ^checkouts/
+^config/config.edn

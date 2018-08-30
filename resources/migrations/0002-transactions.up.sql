@@ -11,7 +11,7 @@ CREATE TABLE transactions (
 
 --;;
 
-CREATE INDEX transactions__date ON transactions (date);
+CREATE INDEX transactions__date ON transactions (date, id);
 
 --;;
 
