@@ -1,7 +1,8 @@
 (ns net.ignorare.haus.web.http
   (:require [clojure.string :as str]
             [ring.mock.request :refer [header]]
-            [ring.util.response :refer [response status]]))
+            [ring.util.response :refer [response status]]
+            [taoensso.truss :refer [have]]))
 
 ;
 ; Resource definition
@@ -42,11 +43,18 @@
 ;
 
 
-(defn bad-request
-  ([]
-   (bad-request ""))
-  ([body]
-   (-> (response body) (status 400))))
+(defmacro make-error-response
+  "Macro to generate common error responses."
+  [name status]
+  `(defn ~name
+     ([]
+      (~name ""))
+     ([body#]
+      (-> (ring.util.response/response body#) (ring.util.response/status ~status)))))
+
+(make-error-response bad-request 400)
+(make-error-response conflict 409)
+(make-error-response server-error 500)
 
 (defn method-not-allowed
   "This requires a sequence of HTTP methods for the Allow header."
@@ -56,12 +64,6 @@
    (-> (response body)
        (status 405)
        (header "Allow" (str/join ", " allow)))))
-
-(defn conflict
-  ([]
-   (conflict ""))
-  ([body]
-   (-> (response body) (status 409))))
 
 (defn url-join
   "Joins a sequence of URI path components into a single path. This does not do
@@ -74,4 +76,4 @@
              (let [base (str/replace base #"/+$" "")
                    part (str/replace part #"^/+" "")]
                (str/join "/" (filter (complement empty?) [base, part])))))]
-    (reduce join parts)))
+    (reduce join (have some? :in parts))))

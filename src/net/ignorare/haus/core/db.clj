@@ -1,10 +1,11 @@
 (ns net.ignorare.haus.core.db
-  (:require [clojure.edn :as json]
+  (:require [clojure.data.json :as json]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
             [migratus.core :as migratus]
             [net.ignorare.haus.core.config :as config]
-            [taoensso.timbre :as timbre]))
+            [taoensso.timbre :as timbre]
+            [taoensso.truss :refer [have]]))
 
 ; Static database parameters. These can't be overridden by external
 ; configuration.
@@ -14,12 +15,20 @@
 
 ; By default, our database spec will be loaded from the config. The tests will
 ; override it.
-(def ^:dynamic db-spec
+(def ^:dynamic *db-spec*
   (delay (config/deep-merge (get @config/config :db) db-params)))
 
 
 ;
 ; Primitive queries
+;
+; These have consistent return types:
+;
+;   get-things: A list of maps representing (decoded) database rows.
+;   get-thing: A single map, as above.
+;   insert-thing!: The primary key of the thing inserted.
+;   update-thing!: True iff we updated something.
+;   delete-thing!: True iff we deleted something.
 ;
 
 
@@ -41,19 +50,20 @@
 (defn insert-person!
   "Inserts a person and returns the new row."
   [con name]
-  (first (jdbc/insert! con :people {:name name})))
+  (let [[{id :id}] (jdbc/insert! con :people {:name name})]
+    id))
 
 (defn update-person!
   "Updates a person, returning true if successful."
   [con id name]
-  (let [[count] (jdbc/update! con :people {:name name} ["id = ?", id])]
-    (> count 0)))
+  (let [[n] (jdbc/update! con :people {:name name} ["id = ?", id])]
+    (> n 0)))
 
 (defn delete-person!
   "Deletes a person, returning true if successful."
   [con id]
-  (let [[count] (jdbc/delete! con :people ["id = ?", id])]
-    (> count 0)))
+  (let [[n] (jdbc/delete! con :people ["id = ?", id])]
+    (> n 0)))
 
 
 ;
@@ -68,13 +78,16 @@
   (first (jdbc/query con ["SELECT * FROM categories WHERE id = ?", id])))
 
 (defn insert-category! [con name]
-  (first (jdbc/insert! con :categories {:name name})))
+  (let [[{id :id}] (jdbc/insert! con :categories {:name name})]
+    id))
 
 (defn update-category! [con id name]
-  (first (jdbc/update! con :categories {:name name} ["id = ?", id])))
+  (let [[n] (jdbc/update! con :categories {:name name} ["id = ?", id])]
+    (> n 0)))
 
 (defn delete-category! [con id]
-  (first (jdbc/delete! con :categories ["id = ?", id])))
+  (let [[n] (jdbc/delete! con :categories ["id = ?", id])]
+    (> n 0)))
 
 
 ;
@@ -93,12 +106,13 @@
   "Decodes a sequence of split rows."
   [splits]
   ; PostgreSQL renders ::money values to JSON as strings, complete with
-  ; currency symbol. We need to convert it back to a BigDecimal.
-  (letfn [(decode-split [row]
-            (update-in row [:amount] #(some-> % (str/replace #"[^-\d\.]" "") (BigDecimal.))))]
-    (->> (json/read-string splits true)
-         (filter some?)  ; If the transaction had no splits, we got "[null]".
-         (map decode-split))))
+  ; currency symbol. We need to convert them back to BigDecimal. If the
+  ; transaction had no splits, we got "[null]".
+  (letfn [(decode-value [key value]
+            (case key
+              (:amount) (-> (have string? value) (str/replace #"[^-\d\.]" "") (BigDecimal.))
+              value))]
+    (filter some? (json/read-str splits, :key-fn keyword, :value-fn decode-value))))
 
 (defn ^:private decode-transaction
   "Decodes a transaction row."
@@ -126,6 +140,14 @@
   [split]
   (select-keys split [:person_id :amount]))
 
+(defn ^:private validate-splits
+  "Throws an IllegalArgumentException if a sequence of splits are not
+  collectively valid. This is a last-ditch effort to keep the database in a
+  sane state; unbalanced splits should be caught and handled higher up."
+  [splits]
+  (when-not (zero? (transduce (map :amount) + splits))
+    (throw (IllegalArgumentException. "Splits do not sum to 0"))))
+
 (defn get-transactions
   "Returns a sequence of transactions. The optional second argument is a
   where-vector (string followed by params)."
@@ -148,7 +170,7 @@
   "Creates a new transaction. The values should be a map similar to the one
   returned by get-transaction:
 
-    :date (required) - java.sql.Date or compatible string (YYYY-MM-DD).
+    :date (required) - java.sql.Date or SQL date string (YYYY-MM-DD).
     :category_id (required) - id of a category.
     :title (required) - a non-empty string.
     :description (optional) - a longer description.
@@ -167,6 +189,7 @@
           splits (map encode-split (get txn :splits []))
           [{txn_id :id}] (jdbc/insert! con :transactions row)]
       (when-not (empty? splits)
+        (validate-splits splits)
         (jdbc/insert-multi! con :splits (map #(assoc % :transaction_id txn_id) splits)))
       txn_id)))
 
@@ -185,32 +208,16 @@
 
       ; Apply split updates, if any.
       (when-not (empty? splits)
-        (when-not (zero? (reduce + (map :amount splits)))
-          (throw (Exception. "Splits do not sum to 0")))
-
+        (validate-splits splits)
         (jdbc/delete! con :splits ["transaction_id = ?", txn_id])
         (jdbc/insert-multi! con :splits (map #(assoc % :transaction_id txn_id) splits)))))
-  nil)
+  true)
 
 (defn delete-transaction!
   "Deletes an existing transaction."
   [con txn_id]
-  (jdbc/delete! con :transactions ["id = ?", txn_id]))
-
-(comment
-  (get-transactions @db-spec)
-  (get-transaction @db-spec 10)
-  (insert-transaction! @db-spec {:date "2018-01-01",
-                                 :category_id 1,
-                                 :title "Title",
-                                 :tags ["tag1" "tag2"],
-                                 :splits [{:bogus 1, :person_id 1, :amount 100M},
-                                          {:person_id 2, :amount -100M}]})
-  (update-transaction! @db-spec 10 {:splits [{:person_id 1, :amount 10M},
-                                             {:person_id 3, :amount -10M}]})
-  (update-transaction! @db-spec 10 {:tags ["tag1", "tag2"]})
-  (get-totals @db-spec))
-
+  (let [[n] (jdbc/delete! con :transactions ["id = ?", txn_id])]
+    (> n 0)))
 
 ;
 ; Templates
@@ -267,13 +274,13 @@
       (when-not (empty? splits)
         (jdbc/delete! con :splits ["template_id = ?", tmpl_id])
         (jdbc/insert-multi! con :splits (map #(assoc % :template_id tmpl_id) splits)))))
-  nil)
+  true)
 
 (defn delete-template!
   "Deletes an existing template."
   [con tmpl_id]
-  (jdbc/delete! con :templates ["id = ?", tmpl_id]))
-
+  (let [[n] (jdbc/delete! con :templates ["id = ?", tmpl_id])]
+    (> n 0)))
 
 
 ;
@@ -295,7 +302,7 @@
 (defn migratus-config []
   {:store :database
    :migration-dir "migrations"
-   :db @db-spec})
+   :db @*db-spec*})
 
 (defn migrate []
   (migratus/migrate (migratus-config)))

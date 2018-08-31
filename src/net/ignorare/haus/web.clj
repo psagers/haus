@@ -4,7 +4,7 @@
             [compojure.route :refer [not-found]]
             [net.ignorare.haus.core.config :as config]
             [net.ignorare.haus.core.db :as db]
-            [net.ignorare.haus.web.http :refer [conflict]]
+            [net.ignorare.haus.web.http :refer [bad-request conflict]]
             [net.ignorare.haus.web.people :as people]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [taoensso.timbre :as timbre])
@@ -19,7 +19,7 @@
   (fn [req]
     ; Mock requests from the tests will have their own database connections.
     (if-not (contains? req :db-con)
-      (jdbc/with-db-connection [con @db/db-spec]
+      (jdbc/with-db-connection [con @db/*db-spec*]
         (handler (assoc req :db-con con)))
       (handler req))))
 
@@ -28,7 +28,7 @@
     (try
       (handler req)
       (catch SQLIntegrityConstraintViolationException e
-        (conflict)))))
+        (conflict (.getMessage e))))))
 
 (defroutes routes
   (context "/people" [] people/routes)
@@ -40,7 +40,6 @@
 (def handler
   (-> routes
       (wrap-json-response)
-      (wrap-json-body {:keywords? true, :bigdecimals? true})
       (default-errors)
       (with-db)
       (with-logging)))

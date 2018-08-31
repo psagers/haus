@@ -1,23 +1,12 @@
 (ns net.ignorare.haus.web.people
-  (:require [clojure.spec.alpha :as s]
-            [compojure.core :refer [ANY defroutes]]
+  (:require [compojure.core :refer [ANY defroutes]]
             [net.ignorare.haus.core.db :as db]
             [net.ignorare.haus.web.http :refer [bad-request defresource
                                                 url-join]]
+            [net.ignorare.haus.web.json :as json :refer [load-schema]]
             [ring.util.request :refer [request-url]]
-            [ring.util.response :refer [created not-found response]]))
-
-(s/def ::name (s/and string? (complement empty?)))
-(s/def ::post-people (s/keys :req-un [::name]))
-(s/def ::put-person (s/keys :req-un [::name]))
-
-(defn conform
-  "Like clojure.spec.alpha/conform, but returns nil on failure."
-  [spec value]
-  (let [value' (s/conform spec value)]
-    (case value'
-      (::s/invalid) nil
-      value')))
+            [ring.util.response :refer [created not-found response]]
+            [taoensso.truss :refer [have]]))
 
 
 ;
@@ -32,17 +21,20 @@
   (let [people (db/get-people con)]
     (response people)))
 
+(def post-people-schema (delay (load-schema "people/post.json")))
+
 (defmethod people :post
   [{con :db-con, body :body, :as req}]
-  (if-let [{name :name} (conform ::post-people body)]
-    (let [person (db/insert-person! con name)
-          url-path (url-join (request-url req) (:id person))]
-      (created url-path person))
+  (if-let [{name :name} (json/conform @post-people-schema body)]
+    (let [person_id (db/insert-person! con name)]
+      (created (url-join (request-url req) (have int? person_id))))
     (bad-request "")))
+
 
 ;
 ; /people/:id
 ;
+
 
 (defresource person)
 
@@ -52,9 +44,11 @@
     (response person)
     (not-found "")))
 
+(def put-person-schema (delay (load-schema "person/put.json")))
+
 (defmethod person :put
   [{con :db-con, {id :id} :params, body :body, :as req}]
-  (if-let [{name :name} (conform ::put-person body)]
+  (if-let [{name :name} (json/conform @put-person-schema body)]
     (if (db/update-person! con id name)
       (response (db/get-person con id))
       (not-found ""))
@@ -63,10 +57,10 @@
 (defmethod person :delete
   [{con :db-con, {id :id} :params, :as req}]
   (if (db/delete-person! con id)
-    (response {:id id})
+    (response "")
     (not-found "")))
 
-(defn decode-person-params
+(defn ^:private decode-person-params
   "Middleware to decode person-resource URI params."
   [handler]
   (fn [req]
