@@ -4,9 +4,10 @@
             [compojure.route :refer [not-found]]
             [net.ignorare.haus.core.config :as config]
             [net.ignorare.haus.core.db :as db]
-            [net.ignorare.haus.web.http :refer [bad-request conflict]]
+            [net.ignorare.haus.web.categories :as categories]
+            [net.ignorare.haus.web.http :refer [conflict]]
             [net.ignorare.haus.web.people :as people]
-            [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
+            [ring.middleware.json :refer [wrap-json-response]]
             [taoensso.timbre :as timbre])
   (:import (java.sql SQLIntegrityConstraintViolationException)))
 
@@ -32,6 +33,7 @@
 
 (defroutes routes
   (context "/people" [] people/routes)
+  (context "/categories" [] categories/routes)
   (ANY "*" [] (not-found "")))
 
 (defn init []
