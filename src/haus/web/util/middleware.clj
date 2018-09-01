@@ -26,5 +26,5 @@
      (handler req)
      (catch SQLIntegrityConstraintViolationException e
        (conflict (.getMessage e)))
-     (catch [:ex :haus.web.util.json/failed-validation] {msg :msg}
-       (bad-request msg)))))
+     (catch [:what :haus.web.util.json/invalid] obj
+       (bad-request (select-keys obj [:message]))))))

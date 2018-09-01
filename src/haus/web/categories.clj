@@ -1,8 +1,7 @@
 (ns haus.web.categories
   (:require [compojure.core :refer [ANY defroutes]]
             [haus.db :as db]
-            [haus.web.util.generic :refer [delete-obj! get-obj new-obj!
-                                                   update-obj! wrap-id-param]]
+            [haus.web.util.generic :as generic :refer [wrap-id-param]]
             [haus.web.util.http :refer [defresource]]
             [haus.web.util.json :refer [load-schema]]
             [ring.util.response :refer [response]]))
@@ -29,7 +28,7 @@
 
 (defmethod categories :post
   [req]
-  (new-obj! req db-fns @post-categories-schema))
+  (generic/new-obj! req db-fns @post-categories-schema))
 
 
 ;
@@ -41,17 +40,17 @@
 
 (defmethod category :get
   [req]
-  (get-obj req db-fns))
+  (generic/get-obj req db-fns))
 
 (def put-category-schema (delay (load-schema "category-put.json")))
 
 (defmethod category :put
   [req]
-  (update-obj! req db-fns @put-category-schema))
+  (generic/update-obj! req db-fns @put-category-schema))
 
 (defmethod category :delete
   [req]
-  (delete-obj! req db-fns))
+  (generic/delete-obj! req db-fns))
 
 ;
 ;

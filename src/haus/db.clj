@@ -65,18 +65,18 @@
   (jdbc/query con ["SELECT * FROM categories"]))
 
 (defn get-category [con id]
-  (first (jdbc/query con ["SELECT * FROM categories WHERE id = ?", id])))
+  (first (jdbc/query con ["SELECT * FROM categories WHERE id = ?", (have integer? id)])))
 
 (defn insert-category! [con category]
-  (let [[{id :id}] (jdbc/insert! con :categories category)]
+  (let [[{id :id}] (jdbc/insert! con :categories (have map? category))]
     id))
 
 (defn update-category! [con id category]
-  (let [[n] (jdbc/update! con :categories category ["id = ?", id])]
+  (let [[n] (jdbc/update! con :categories (have map? category) ["id = ?", (have integer? id)])]
     (> n 0)))
 
 (defn delete-category! [con id]
-  (let [[n] (jdbc/delete! con :categories ["id = ?", id])]
+  (let [[n] (jdbc/delete! con :categories ["id = ?", (have integer? id)])]
     (> n 0)))
 
 

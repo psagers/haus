@@ -19,10 +19,9 @@
 (defn new-obj!
   "Generic handler for creating a new object."
   [{con :db-con, body :body, :as req} {:keys [insert-fn]} schema]
-  (if-let [obj (json/conform schema body)]
-    (let [obj_id (insert-fn con obj)]
-      (created (url-join (request-url req) (have int? obj_id))))
-    (bad-request "")))
+  (let [obj (json/conform! schema body)
+        obj_id (insert-fn con obj)]
+    (created (url-join (request-url req) (have int? obj_id)))))
 
 (defn get-obj
   "Generic handler for retrieving a single object."
@@ -34,11 +33,10 @@
 (defn update-obj!
   "Generic handler for updating an existing object."
   [{con :db-con, {id :id} :params, body :body} {:keys [update-fn get-fn]} schema]
-  (if-let [obj (json/conform schema body)]
+  (let [obj (json/conform! schema body)]
     (if (update-fn con id obj)
       (response (get-fn con id))
-      (not-found ""))
-    (bad-request "")))
+      (not-found ""))))
 
 (defn delete-obj!
   "Generic handler for deleting an existing object."

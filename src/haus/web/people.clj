@@ -1,8 +1,7 @@
 (ns haus.web.people
   (:require [compojure.core :refer [ANY defroutes]]
             [haus.db :as db]
-            [haus.web.util.generic :refer [delete-obj! get-obj new-obj!
-                                                   update-obj! wrap-id-param]]
+            [haus.web.util.generic :as generic :refer [wrap-id-param]]
             [haus.web.util.http :refer [defresource]]
             [haus.web.util.json :refer [load-schema]]
             [ring.util.response :refer [response]]))
@@ -29,7 +28,7 @@
 
 (defmethod people :post
   [req]
-  (new-obj! req db-fns @post-people-schema))
+  (generic/new-obj! req db-fns @post-people-schema))
 
 
 ;
@@ -41,17 +40,17 @@
 
 (defmethod person :get
   [req]
-  (get-obj req db-fns))
+  (generic/get-obj req db-fns))
 
 (def put-person-schema (delay (load-schema "person-put.json")))
 
 (defmethod person :put
   [req]
-  (update-obj! req db-fns @put-person-schema))
+  (generic/update-obj! req db-fns @put-person-schema))
 
 (defmethod person :delete
   [req]
-  (delete-obj! req db-fns))
+  (generic/delete-obj! req db-fns))
 
 ;
 ;
