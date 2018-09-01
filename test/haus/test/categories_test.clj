@@ -1,8 +1,8 @@
 (ns haus.test.categories_test
   (:require [clojure.test :refer [deftest is testing]]
             [haus.test.util :as util :refer [*db-con*]]
-            [net.ignorare.haus.db :as db]
-            [net.ignorare.haus.web :refer [handler]]
+            [haus.db :as db]
+            [haus.web :refer [handler]]
             [ring.mock.request :refer [json-body]]
             [ring.util.response :refer [find-header]]))
 

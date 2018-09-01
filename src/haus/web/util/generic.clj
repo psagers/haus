@@ -1,7 +1,7 @@
-(ns net.ignorare.haus.web.generic
+(ns haus.web.util.generic
   (:require [compojure.route :refer [not-found]]
-            [net.ignorare.haus.web.http :refer [bad-request url-join]]
-            [net.ignorare.haus.web.json :as json]
+            [haus.web.util.http :refer [bad-request url-join]]
+            [haus.web.util.json :as json]
             [ring.util.request :refer [request-url]]
             [ring.util.response :refer [created response]]
             [taoensso.truss :refer [have]]))
@@ -11,7 +11,7 @@
 ;
 ; Each one takes a request and a map of database functions (:insert-fn,
 ; :get-fn, :udpate-fn, :delete-fn) as the first two arguments. Database
-; functions follow the conventions documented in net.ignorare.haus.db.
+; functions follow the conventions documented in haus.db.
 ; Handlers that need to process the request body additionally take a JsonSchema
 ; object.
 ;

@@ -1,10 +1,10 @@
-(ns net.ignorare.haus.web
+(ns haus.web
   (:require [compojure.core :refer [ANY context defroutes]]
             [compojure.route :refer [not-found]]
-            [net.ignorare.haus.api.categories :as categories]
-            [net.ignorare.haus.api.people :as people]
-            [net.ignorare.haus.web.middleware :refer [default-errors with-db
-                                                      with-logging]]
+            [haus.web.categories :as categories]
+            [haus.web.people :as people]
+            [haus.web.util.middleware :refer [default-errors with-db
+                                              with-logging]]
             [ring.middleware.head :refer [wrap-head]]
             [ring.middleware.json :refer [wrap-json-response]]
             [ring.middleware.lint :refer [wrap-lint]]

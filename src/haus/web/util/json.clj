@@ -1,7 +1,8 @@
-(ns net.ignorare.haus.web.json
+(ns haus.web.util.json
   "Tools for validating against JSON schemas. Schemas are loaded from resource
   files and used to validate JSON data before it's converted to Clojure data
   structures."
+  (:require [slingshot.slingshot :refer [throw+]])
   (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.github.fge.jsonschema.core.report ProcessingReport)
            (com.github.fge.jsonschema.main JsonSchema JsonSchemaFactory)))
@@ -73,9 +74,9 @@
 
 (defn conform!
   "Given a JsonSchema and JSON source, this validates the value and, if
-  successful, returns it as a Clojure data structure. Raises a
-  JsonSchemaException on failure. Accepts an option map with :keywords? and
-  :bigdecimals?, both defaulting to true."
+  successful, returns it as a Clojure data structure. Throws a
+  {::failed-validation msg) on failure. Accepts an option map with :keywords?
+  and :bigdecimals?, both defaulting to true."
   ([^JsonSchema schema value]
    (conform schema value {}))
 
@@ -84,4 +85,4 @@
          report (validate schema node)]
      (if (.isSuccess report)
        (node->clj node opts)
-       (throw (Exception. report))))))
+       (throw+ {:ex ::failed-validation, :msg (str report)})))))

@@ -1,11 +1,11 @@
-(ns net.ignorare.haus.api.transactions
+(ns haus.web.transactions
   (:require [compojure.core :refer [ANY defroutes]]
-            [net.ignorare.haus.db :as db]
-            [net.ignorare.haus.web.generic :refer [delete-obj! get-obj
+            [haus.db :as db]
+            [haus.web.util.generic :refer [delete-obj! get-obj
                                                    wrap-id-param]]
-            [net.ignorare.haus.web.http :refer [bad-request defresource
+            [haus.web.util.http :refer [bad-request defresource
                                                 url-join]]
-            [net.ignorare.haus.web.json :as json :refer [load-schema]]
+            [haus.web.util.json :as json :refer [load-schema]]
             [ring.util.request :refer [request-url]]
             [ring.util.response :refer [created not-found response]]
             [taoensso.truss :refer [have]]))

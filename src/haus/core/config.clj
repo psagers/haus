@@ -1,4 +1,4 @@
-(ns net.ignorare.haus.core.config
+(ns haus.core.config
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 

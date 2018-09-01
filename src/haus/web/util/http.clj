@@ -1,4 +1,4 @@
-(ns net.ignorare.haus.web.http
+(ns haus.web.util.http
   (:require [clojure.string :as str]
             [ring.util.response :as resp]
             [taoensso.truss :refer [have]]))

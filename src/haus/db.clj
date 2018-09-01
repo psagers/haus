@@ -1,9 +1,9 @@
-(ns net.ignorare.haus.core.db
+(ns haus.db
   (:require [clojure.data.json :as json]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
             [migratus.core :as migratus]
-            [net.ignorare.haus.core.config :as config]
+            [haus.core.config :as config]
             [taoensso.timbre :as timbre]
             [taoensso.truss :refer [have]]))
 
@@ -95,35 +95,30 @@
 (defn ^:private decode-splits
   "Decodes a sequence of split rows."
   [splits]
-  ; PostgreSQL renders ::money values to JSON as strings, complete with
-  ; currency symbol. We need to convert them back to BigDecimal. If the
-  ; transaction had no splits, we got "[null]".
   (letfn [(decode-value [key value]
             (case key
-              (:amount) (-> (have string? value) (str/replace #"[^-\d\.]" "") (BigDecimal.))
+              (:amount) (.setScale (bigdec value) 2)
               value))]
-    (filter some? (json/read-str splits, :key-fn keyword, :value-fn decode-value))))
+    (vec (filter some? (json/read-str splits, :key-fn keyword, :value-fn decode-value)))))
 
 (defn ^:private decode-transaction
   "Decodes a transaction row."
   [row]
   (-> row
-      (update-in [:tags] vec)
-      (update-in [:splits] decode-splits)))
+      (update :tags vec)
+      (update :splits decode-splits)))
 
-(defn ^:private encode-tags-field
+(defn ^:private encode-tags
   "Encodes the tags in a transaction map."
-  [txn]
-  (if (contains? txn :tags)
-    (update-in txn [:tags] #(->> % (filter string?) (remove empty?) (to-array)))
-    txn))
+  [tags]
+  (->> tags (filter string?) (remove empty?) (to-array)))
 
 (defn ^:private encode-transaction
   "Encodes a map of transaction values for storage."
   [txn]
-  (-> txn
-      (select-keys [:date :category_id :title :description :tags])
-      (encode-tags-field)))
+  (cond-> txn
+    true (select-keys [:date :category_id :title :description :tags])
+    (contains? txn :tags) (update :tags encode-tags)))
 
 (defn ^:private encode-split
   "Encodes a map of split values for storage."
@@ -227,15 +222,15 @@
   "Decodes a template row."
   [row]
   (-> row
-      (update-in [:tags] vec)
-      (update-in [:splits] decode-splits)))
+      (update :tags vec)
+      (update :splits decode-splits)))
 
 (defn ^:private encode-template
   "Encodes a map of template values for storage."
   [tmpl]
-  (-> tmpl
-      (select-keys [:category_id :title :description :tags])
-      (encode-tags-field)))
+  (cond-> tmpl
+    true (select-keys [:category_id :title :description :tags])
+    (contains? tmpl :tags) (update :tags encode-tags)))
 
 (defn get-templates
   "Returns all templates."
@@ -289,54 +284,3 @@
   "Returns all rows from the totals table."
   [con]
   (jdbc/query con ["SELECT * FROM totals ORDER BY person_id, category_id"]))
-
-
-;
-; Migration operations
-;
-
-
-(defn migratus-config []
-  {:store :database
-   :migration-dir "migrations"
-   :db @*db-spec*})
-
-(defn migrate []
-  (migratus/migrate (migratus-config)))
-
-(defn rollback []
-  (migratus/rollback (migratus-config)))
-
-(defn up [& ids]
-  (apply migratus/up (migratus-config) ids))
-
-(defn down [& ids]
-  (apply migratus/down (migratus-config) ids))
-
-(defn reset []
-  (migratus/reset (migratus-config)))
-
-(defn pending-list []
-  (migratus/pending-list (migratus-config)))
-
-(defn -main
-  "Entry point for a leiningen alias."
-  ([]
-   (println "Database managment commands:
-
-  migrate: Apply all missing migrations.
-  rollback: Unapply the latest migrations.
-  up id ...: Apply one or more migrations by numeric identifier.
-  down id ...: Unapply one or more migrations by numeric identifier.
-  reset: Unapply and reapply all migrations.
-  pending-list: List unapplied migrations."))
-  ([action & args]
-   (timbre/with-level (config/log-level)
-     (case action
-       ("migrate") (migrate)
-       ("rollback") (rollback)
-       ("up") (apply up (map #(Integer/parseInt %) args))
-       ("down") (apply down (map #(Integer/parseInt %) args))
-       ("reset") (reset)
-       ("pending-list") (println (pending-list))
-       (println (str "Unknown db action: " action))))))

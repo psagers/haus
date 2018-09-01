@@ -1,8 +1,9 @@
-(ns net.ignorare.haus.web.middleware
+(ns haus.web.util.middleware
   (:require [clojure.java.jdbc :as jdbc]
-            [net.ignorare.haus.core.config :as config]
-            [net.ignorare.haus.db :as db]
-            [net.ignorare.haus.web.http :refer [conflict]]
+            [haus.core.config :as config]
+            [haus.db :as db]
+            [haus.web.util.http :refer [bad-request conflict]]
+            [slingshot.slingshot :refer [try+]]
             [taoensso.timbre :as timbre])
   (:import (java.sql SQLIntegrityConstraintViolationException)))
 
@@ -21,7 +22,9 @@
 
 (defn default-errors [handler]
   (fn [req]
-    (try
-      (handler req)
-      (catch SQLIntegrityConstraintViolationException e
-        (conflict (.getMessage e))))))
+    (try+
+     (handler req)
+     (catch SQLIntegrityConstraintViolationException e
+       (conflict (.getMessage e)))
+     (catch [:ex :haus.web.util.json/failed-validation] {msg :msg}
+       (bad-request msg)))))

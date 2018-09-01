@@ -1,10 +1,10 @@
-(ns net.ignorare.haus.api.people
+(ns haus.web.people
   (:require [compojure.core :refer [ANY defroutes]]
-            [net.ignorare.haus.db :as db]
-            [net.ignorare.haus.web.generic :refer [delete-obj! get-obj new-obj!
+            [haus.db :as db]
+            [haus.web.util.generic :refer [delete-obj! get-obj new-obj!
                                                    update-obj! wrap-id-param]]
-            [net.ignorare.haus.web.http :refer [defresource]]
-            [net.ignorare.haus.web.json :refer [load-schema]]
+            [haus.web.util.http :refer [defresource]]
+            [haus.web.util.json :refer [load-schema]]
             [ring.util.response :refer [response]]))
 
 (def db-fns

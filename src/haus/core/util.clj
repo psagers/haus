@@ -1,4 +1,4 @@
-(ns net.ignorare.haus.core.util)
+(ns haus.core.util)
 
 ;
 ; Miscellaneous Clojure utilities.

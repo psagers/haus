@@ -3,8 +3,8 @@
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
             [clojure.test :refer [is]]
-            [net.ignorare.haus.db :as db]
-            [net.ignorare.haus.db.migrate :as migrate]
+            [haus.db :as db]
+            [haus.db.migrate :as migrate]
             [ring.mock.request :as mock]
             [ring.util.response :refer [find-header]]
             [taoensso.timbre :as timbre]))
