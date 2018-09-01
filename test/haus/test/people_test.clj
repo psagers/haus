@@ -1,7 +1,7 @@
 (ns haus.test.people_test
   (:require [clojure.test :refer [deftest is testing]]
             [haus.test.util :as util :refer [*db-con*]]
-            [net.ignorare.haus.core.db :as db]
+            [net.ignorare.haus.db :as db]
             [net.ignorare.haus.web :refer [handler]]
             [ring.mock.request :refer [json-body]]
             [ring.util.response :refer [find-header]]))

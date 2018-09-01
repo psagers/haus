@@ -10,24 +10,23 @@
 
 (defn deep-merge
   "Recursively merges maps."
-  [& maps]
-  (if (every? map? maps)
-    (apply merge-with deep-merge maps)
-    (last maps)))
+  [& args]
+  (if (every? map? args)
+    (apply merge-with deep-merge args)
+    (last args)))
 
 (defn load-user-config
   "Loads the user config from the EDN file. The path is taken from the
   HAUS_CONFIG environment variable."
   []
-  (some-> (System/getenv "HAUS_CONFIG")
-          (io/reader)
-          (java.io.PushbackReader.)
-          (edn/read)))
+  (if-let [path (System/getenv "HAUS_CONFIG")]
+    (with-open [rdr (java.io.PushbackReader. (io/reader path))]
+      (edn/read rdr))))
 
 (defn load-config
   "Returns the final, merged config."
   []
-  (if-some [user-config (load-user-config)]
+  (if-let [user-config (load-user-config)]
     (deep-merge default-config user-config)
     default-config))
 

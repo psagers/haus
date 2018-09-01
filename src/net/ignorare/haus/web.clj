@@ -5,7 +5,10 @@
             [net.ignorare.haus.api.people :as people]
             [net.ignorare.haus.web.middleware :refer [default-errors with-db
                                                       with-logging]]
+            [ring.middleware.head :refer [wrap-head]]
             [ring.middleware.json :refer [wrap-json-response]]
+            [ring.middleware.lint :refer [wrap-lint]]
+            [ring.middleware.params :refer [wrap-params]]
             [taoensso.timbre :as timbre]))
 
 (defroutes routes
@@ -19,6 +22,9 @@
 (def handler
   (-> routes
       (default-errors)
+      (wrap-params)
       (wrap-json-response)
+      (wrap-lint)
       (with-db)
-      (with-logging)))
+      (with-logging)
+      (wrap-head)))

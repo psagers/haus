@@ -1,6 +1,6 @@
 (ns net.ignorare.haus.api.transactions
   (:require [compojure.core :refer [ANY defroutes]]
-            [net.ignorare.haus.core.db :as db]
+            [net.ignorare.haus.db :as db]
             [net.ignorare.haus.web.generic :refer [delete-obj! get-obj
                                                    wrap-id-param]]
             [net.ignorare.haus.web.http :refer [bad-request defresource
@@ -30,6 +30,7 @@
 (defresource transactions)
 
 (defmethod transactions :get
+  "TODO: Query parameters (date/cursor, category, fulltext, tags, person?)"
   [{con :db-con}]
   (response (db/get-transactions con)))
 

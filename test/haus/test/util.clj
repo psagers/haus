@@ -3,7 +3,8 @@
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
             [clojure.test :refer [is]]
-            [net.ignorare.haus.core.db :as db]
+            [net.ignorare.haus.db :as db]
+            [net.ignorare.haus.db.migrate :as migrate]
             [ring.mock.request :as mock]
             [ring.util.response :refer [find-header]]
             [taoensso.timbre :as timbre]))
@@ -28,7 +29,7 @@
     ; install this connection into mock requests.
     (try
       (binding [db/*db-spec* (delay test-db-spec)]
-        (db/migrate)
+        (migrate/migrate)
         (jdbc/with-db-connection [con @db/*db-spec*]
           (binding [*db-con* con]
             (f))))

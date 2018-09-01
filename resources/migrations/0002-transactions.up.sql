@@ -49,7 +49,7 @@ CREATE TABLE splits (
     transaction_id bigint REFERENCES transactions ON DELETE CASCADE,
     person_id integer REFERENCES people ON DELETE RESTRICT,
     PRIMARY KEY (transaction_id, person_id),
-    amount money NOT NULL CONSTRAINT non_zero CHECK (amount <> 0::money)
+    amount decimal(10, 2) NOT NULL CONSTRAINT non_zero CHECK (amount <> 0)
 );
 
 --;;

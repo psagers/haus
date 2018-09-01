@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS totals (
     person_id integer REFERENCES people ON DELETE CASCADE,
     category_id integer REFERENCES categories ON DELETE CASCADE,
     PRIMARY KEY (person_id, category_id),
-    amount money NOT NULL DEFAULT 0::money
+    amount numeric(10, 2) NOT NULL DEFAULT 0
 );
 
 --;;
@@ -131,7 +131,7 @@ CREATE TRIGGER update_split_totals_post AFTER INSERT OR UPDATE ON splits
 -- Computes the current total for every person-category pair. These are cached,
 -- so this function is just for verifying or resetting the "totals" table.
 CREATE OR REPLACE VIEW dynamic_totals AS
-    SELECT p.id AS person_id, c.id AS category_id, COALESCE(SUM(s.amount), 0::money) AS amount
+    SELECT p.id AS person_id, c.id AS category_id, COALESCE(SUM(s.amount), 0) AS amount
         FROM (people AS p CROSS JOIN categories AS c)
                  LEFT OUTER JOIN
              (transactions AS tx INNER JOIN splits AS s ON (tx.id = s.transaction_id))

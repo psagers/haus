@@ -1,7 +1,7 @@
 (ns net.ignorare.haus.web.middleware
   (:require [clojure.java.jdbc :as jdbc]
             [net.ignorare.haus.core.config :as config]
-            [net.ignorare.haus.core.db :as db]
+            [net.ignorare.haus.db :as db]
             [net.ignorare.haus.web.http :refer [conflict]]
             [taoensso.timbre :as timbre])
   (:import (java.sql SQLIntegrityConstraintViolationException)))

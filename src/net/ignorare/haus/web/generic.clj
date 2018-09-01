@@ -11,7 +11,7 @@
 ;
 ; Each one takes a request and a map of database functions (:insert-fn,
 ; :get-fn, :udpate-fn, :delete-fn) as the first two arguments. Database
-; functions follow the conventions documented in net.ignorare.haus.core.db.
+; functions follow the conventions documented in net.ignorare.haus.db.
 ; Handlers that need to process the request body additionally take a JsonSchema
 ; object.
 ;

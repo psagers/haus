@@ -12,5 +12,5 @@ CREATE TABLE template_splits (
     template_id bigint REFERENCES templates ON DELETE CASCADE,
     person_id integer REFERENCES people ON DELETE RESTRICT,
     PRIMARY KEY (template_id, person_id),
-    amount money NOT NULL CONSTRAINT non_zero CHECK (amount <> 0::money)
+    amount numeric(10, 2) NOT NULL CONSTRAINT non_zero CHECK (amount <> 0)
 );

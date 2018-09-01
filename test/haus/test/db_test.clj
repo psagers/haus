@@ -2,7 +2,7 @@
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.test :refer [deftest is]]
             [haus.test.util :as util :refer [*db-con*]]
-            [net.ignorare.haus.core.db :as db]
+            [net.ignorare.haus.db :as db]
             [net.ignorare.haus.core.util :refer [map-vals]]))
 
 (util/use-fixtures)

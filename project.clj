@@ -9,6 +9,7 @@
                  [com.taoensso/truss "1.5.0"]
                  [com.taoensso/timbre "4.10.0"]
                  [com.fzakaria/slf4j-timbre "0.3.12" :exclusions [com.taoensso/timbre]]
+                 ;[failjure "1.3.0"]
                  [org.clojure/java.jdbc "0.7.8"]
                  [com.impossibl.pgjdbc-ng/pgjdbc-ng "0.7"]
                  [migratus "1.0.8"]
@@ -24,7 +25,7 @@
              :uberjar {:aot :all}}
   :ring {:init net.ignorare.haus.web/init
          :handler net.ignorare.haus.web/handler}
-  :aliases {"db" ["run" "-m" "net.ignorare.haus.core.db"]
+  :aliases {"db" ["run" "-m" "net.ignorare.haus.db.migrate"]
             "test" ["run" "-m" "circleci.test/dir" :project/test-paths]
             "tests" ["run" "-m" "circleci.test"]
             "retest" ["run" "-m" "circleci.test.retest"]})

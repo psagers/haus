@@ -1,6 +1,9 @@
 (ns net.ignorare.haus.web.json
-  (:require [clojure.java.io :as io])
+  "Tools for validating against JSON schemas. Schemas are loaded from resource
+  files and used to validate JSON data before it's converted to Clojure data
+  structures."
   (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
+           (com.github.fge.jsonschema.core.report ProcessingReport)
            (com.github.fge.jsonschema.main JsonSchema JsonSchemaFactory)))
 
 (def ^:private json-node? (partial instance? JsonNode))
@@ -41,13 +44,18 @@
         uri (str "resource:/json-schema/" filename)]
     (.getJsonSchema factory uri)))
 
+(defn validate
+  "Validates a JSON value against a schema and returns the ProcessingReport.
+  The value may be a JsonNode or anything that can be converted to one."
+  [^JsonSchema schema value]
+  (let [value (if-not (json-node? value) (->node value) value)]
+    (.validate schema value)))
+
 (defn valid?
   "Returns true iff the given JSON validates against the schema. Use
   load-schema to load your schema from disk."
-  [^JsonSchema schema value]
-  (let [value (if-not (json-node? value) (->node value) value)
-        report (.validate schema value)]
-    (.isSuccess report)))
+  ^ProcessingReport [^JsonSchema schema value]
+  (.isSuccess (validate schema value)))
 
 (defn conform
   "Given a JsonSchema and JSON source, this validates the value and, if
@@ -62,3 +70,18 @@
      (if (valid? schema node)
        (node->clj node opts)
        nil))))
+
+(defn conform!
+  "Given a JsonSchema and JSON source, this validates the value and, if
+  successful, returns it as a Clojure data structure. Raises a
+  JsonSchemaException on failure. Accepts an option map with :keywords? and
+  :bigdecimals?, both defaulting to true."
+  ([^JsonSchema schema value]
+   (conform schema value {}))
+
+  ([^JsonSchema schema value opts]
+   (let [node (->node value)
+         report (validate schema node)]
+     (if (.isSuccess report)
+       (node->clj node opts)
+       (throw (Exception. report))))))

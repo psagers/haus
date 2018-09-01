@@ -1,6 +1,6 @@
 (ns net.ignorare.haus.api.categories
   (:require [compojure.core :refer [ANY defroutes]]
-            [net.ignorare.haus.core.db :as db]
+            [net.ignorare.haus.db :as db]
             [net.ignorare.haus.web.generic :refer [delete-obj! get-obj new-obj!
                                                    update-obj! wrap-id-param]]
             [net.ignorare.haus.web.http :refer [defresource]]
