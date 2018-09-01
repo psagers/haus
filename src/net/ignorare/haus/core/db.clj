@@ -37,31 +37,21 @@
 ;
 
 
-(defn get-people
-  "Returns all people from the database."
-  [con]
+(defn get-people [con]
   (jdbc/query con ["SELECT * FROM people"]))
 
-(defn get-person
-  "Returns a single person from the database."
-  [con id]
+(defn get-person [con id]
   (first (jdbc/query con ["SELECT * FROM people WHERE id = ?", id])))
 
-(defn insert-person!
-  "Inserts a person and returns the new row."
-  [con name]
-  (let [[{id :id}] (jdbc/insert! con :people {:name name})]
+(defn insert-person! [con person]
+  (let [[{id :id}] (jdbc/insert! con :people person)]
     id))
 
-(defn update-person!
-  "Updates a person, returning true if successful."
-  [con id name]
-  (let [[n] (jdbc/update! con :people {:name name} ["id = ?", id])]
+(defn update-person! [con id person]
+  (let [[n] (jdbc/update! con :people person ["id = ?", id])]
     (> n 0)))
 
-(defn delete-person!
-  "Deletes a person, returning true if successful."
-  [con id]
+(defn delete-person! [con id]
   (let [[n] (jdbc/delete! con :people ["id = ?", id])]
     (> n 0)))
 
@@ -77,12 +67,12 @@
 (defn get-category [con id]
   (first (jdbc/query con ["SELECT * FROM categories WHERE id = ?", id])))
 
-(defn insert-category! [con name]
-  (let [[{id :id}] (jdbc/insert! con :categories {:name name})]
+(defn insert-category! [con category]
+  (let [[{id :id}] (jdbc/insert! con :categories category)]
     id))
 
-(defn update-category! [con id name]
-  (let [[n] (jdbc/update! con :categories {:name name} ["id = ?", id])]
+(defn update-category! [con id category]
+  (let [[n] (jdbc/update! con :categories category ["id = ?", id])]
     (> n 0)))
 
 (defn delete-category! [con id]
@@ -125,7 +115,7 @@
   "Encodes the tags in a transaction map."
   [txn]
   (if (contains? txn :tags)
-    (update-in txn [:tags] to-array)
+    (update-in txn [:tags] #(->> % (filter string?) (remove empty?) (to-array)))
     txn))
 
 (defn ^:private encode-transaction
@@ -139,6 +129,13 @@
   "Encodes a map of split values for storage."
   [split]
   (select-keys split [:person_id :amount]))
+
+(defn ^:private encode-splits
+  "Encodes a sequence of split values for storage."
+  [splits]
+  (->> splits
+       (map encode-split)
+       (remove #(zero? (get % :amount)))))
 
 (defn ^:private validate-splits
   "Throws an IllegalArgumentException if a sequence of splits are not
@@ -186,7 +183,7 @@
   [con txn]
   (jdbc/with-db-transaction [con con]
     (let [row (encode-transaction txn)
-          splits (map encode-split (get txn :splits []))
+          splits (encode-splits (get txn :splits []))
           [{txn_id :id}] (jdbc/insert! con :transactions row)]
       (when-not (empty? splits)
         (validate-splits splits)
@@ -200,7 +197,7 @@
   [con txn_id txn]
   (jdbc/with-db-transaction [con con]
     (let [row (encode-transaction txn)
-          splits (map encode-split (get txn :splits []))]
+          splits (encode-splits (get txn :splits []))]
 
       ; Apply transaction updates, if any.
       (when-not (empty? row)

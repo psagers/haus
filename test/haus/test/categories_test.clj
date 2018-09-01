@@ -16,8 +16,8 @@
       (is (empty? (util/response-json resp)))))
 
   (testing "Found"
-    (db/insert-category! *db-con* "Expenses")
-    (db/insert-category! *db-con* "Payments")
+    (db/insert-category! *db-con* {:name "Expenses"})
+    (db/insert-category! *db-con* {:name "Payments"})
 
     (let [req (util/request :get "/categories")
           resp (handler req)]
@@ -37,7 +37,7 @@
       (is (= 404 (:status resp)))))
 
   (testing "Found"
-    (let [id (db/insert-category! *db-con* "Expenses")
+    (let [id (db/insert-category! *db-con* {:name "Expenses"})
           req (util/request :get (str "/categories/" id))
           resp (handler req)]
       (is (= 200 (:status resp)))
@@ -66,7 +66,7 @@
         (is (.find (.matcher #"/categories/\d+$" location)))))))
 
 (deftest test-update-category
-  (let [id (db/insert-category! *db-con* "Expenses")
+  (let [id (db/insert-category! *db-con* {:name "Expenses"})
         req (-> (util/request :put (str "/categories/" id))
                 (json-body {:name "Alicia"}))
         resp (handler req)]

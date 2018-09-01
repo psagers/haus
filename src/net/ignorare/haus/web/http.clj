@@ -1,7 +1,7 @@
 (ns net.ignorare.haus.web.http
-  (:require [clojure.string :as str]
-            [ring.mock.request :refer [header]]
-            [ring.util.response :refer [response status]]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
+            [ring.util.response :as resp]
             [taoensso.truss :refer [have]]))
 
 ;
@@ -12,17 +12,17 @@
   "This is a relatively simple wrapper around defmulti. It automatically
   generates a default method that sends an appropriate 405 response. This
   assumes that the handlers will take the request as their sole argument."
-  [name]
+  [resource-name]
   `(do
-     (defmulti ~name :request-method)
+     (defmulti ~resource-name :request-method)
 
-     (defmethod ~name :options
-       [req#]
-       (-> (response "") (header-allow (resource-methods ~name))))
+     (defmethod ~resource-name :options
+       [_req#]
+       (-> (resp/response "") (header-allow (resource-methods ~resource-name))))
 
-     (defmethod ~name :default
-       [req#]
-       (-> (response "") (status 405) (header-allow (resource-methods ~name))))))
+     (defmethod ~resource-name :default
+       [_req#]
+       (-> (method-not-allowed (resource-methods ~resource-name))))))
 
 (defn resource-methods
   "Returns the HTTP methods supported by a multi-method resource."
@@ -33,9 +33,10 @@
        (map str/upper-case)))
 
 (defn header-allow
-  "Adds an Allow header with the given HTTP methods."
+  "Adds an Allow header with the given HTTP methods. The given methods are
+  assumed to be valid upper-case strings."
   [resp allow]
-  (header resp "Allow" (str/join ", " allow)))
+  (update-in resp [:headers "Allow"] (str/join ", " allow)))
 
 
 ;
@@ -61,9 +62,9 @@
   ([allow]
    (method-not-allowed allow ""))
   ([allow body]
-   (-> (response body)
-       (status 405)
-       (header "Allow" (str/join ", " allow)))))
+   (-> (resp/response body)
+       (resp/status 405)
+       (header-allow allow))))
 
 (defn url-join
   "Joins a sequence of URI path components into a single path. This does not do

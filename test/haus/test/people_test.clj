@@ -16,8 +16,8 @@
       (is (empty? (util/response-json resp)))))
 
   (testing "Found"
-    (db/insert-person! *db-con* "Alice")
-    (db/insert-person! *db-con* "Bob")
+    (db/insert-person! *db-con* {:name "Alice"})
+    (db/insert-person! *db-con* {:name "Bob"})
 
     (let [req (util/request :get "/people")
           resp (handler req)]
@@ -37,7 +37,7 @@
       (is (= 404 (:status resp)))))
 
   (testing "Found"
-    (let [id (db/insert-person! *db-con* "Alice")
+    (let [id (db/insert-person! *db-con* {:name "Alice"})
           req (util/request :get (str "/people/" id))
           resp (handler req)]
       (is (= 200 (:status resp)))
@@ -66,7 +66,7 @@
         (is (.find (.matcher #"/people/\d+$" location)))))))
 
 (deftest test-update-person
-  (let [id (db/insert-person! *db-con* "Alice")
+  (let [id (db/insert-person! *db-con* {:name "Alice"})
         req (-> (util/request :put (str "/people/" id))
                 (json-body {:name "Alicia"}))
         resp (handler req)]

@@ -13,7 +13,7 @@
 ;
 
 
-(defn insert-base-rows
+(defn insert-base-rows!
   "Inserts some people and categories to play with."
   []
   (jdbc/insert-multi! *db-con* :people
@@ -58,30 +58,30 @@
 
 
 (deftest test-new-txn
-  (insert-base-rows)
+  (insert-base-rows!)
   (db/insert-transaction! *db-con* (merge base-transaction
-                                        {:splits (make-splits {1 700, 2 -700})}))
+                                          {:splits (make-splits {1 700, 2 -700})}))
 
   (is (= (person-totals) {1 700M, 2 -700M, 3 0M})))
 
 (deftest test-update-splits
-  (insert-base-rows)
+  (insert-base-rows!)
   (let [txn_id (db/insert-transaction! *db-con* (merge base-transaction
-                                                     {:splits (make-splits {1 700, 2 -700})}))]
+                                                       {:splits (make-splits {1 700, 2 -700})}))]
     (db/update-transaction! *db-con* txn_id {:splits (make-splits {1 1400, 2 -1400})}))
 
   (is (= (person-totals) {1 1400M, 2 -1400M, 3 0M})))
 
 (deftest test-delete-txn
-  (insert-base-rows)
+  (insert-base-rows!)
   (let [txn_id (db/insert-transaction! *db-con* (merge base-transaction
-                                                     {:splits (make-splits {1 700, 2 -700})}))]
+                                                       {:splits (make-splits {1 700, 2 -700})}))]
     (jdbc/delete! *db-con* :transactions ["id = ?", txn_id]))
 
   (is (= (person-totals) {1 0M, 2 0M, 3 0M})))
 
 (deftest test-change-category
-  (insert-base-rows)
+  (insert-base-rows!)
   (let [_       (db/insert-transaction! *db-con* (merge base-transaction {:category_id 1, :splits (make-splits {1 800, 2 -400, 3 -400})}))
         util_id (db/insert-transaction! *db-con* (merge base-transaction {:category_id 1, :splits (make-splits {1 50 2 -25, 3 -25})}))
         _       (db/insert-transaction! *db-con* (merge base-transaction {:category_id 3, :splits (make-splits {1 -425, 3 425})}))]

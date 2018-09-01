@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "resource:/json-schema/transactions-post.json",
+
+  "type": "object",
+  "properties": {
+    "date": {"$ref": "_definitions.json#/date"},
+    "category_id": {"$ref": "_definitions.json#/category_id"},
+    "title": {"$ref": "_definitions.json#/title"},
+    "description": {"$ref": "_definitions.json#/description"},
+    "tags": {"$ref": "_definitions.json#/tags"},
+    "splits": {"$ref": "_definitions.json#/splits"}
+  },
+  "required": ["date", "category_id", "title"],
+  "additionalProperties": false
+}
