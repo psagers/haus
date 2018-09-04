@@ -1,10 +1,11 @@
 (ns haus.db
-  (:require [clojure.data.json :as json]
+  (:require [clojure.core.match :refer [match]]
+            [clojure.data.json :as json]
             [clojure.java.jdbc :as jdbc]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [migratus.core :as migratus]
             [haus.core.config :as config]
-            [taoensso.timbre :as timbre]
+            [haus.db.util :refer [where-join]]
             [taoensso.truss :refer [have]]))
 
 ; Static database parameters. These can't be overridden by external
@@ -36,7 +37,6 @@
 ; People
 ;
 
-
 (defn get-people [con]
   (jdbc/query con ["SELECT * FROM people"]))
 
@@ -60,23 +60,22 @@
 ; Categories
 ;
 
-
 (defn get-categories [con]
   (jdbc/query con ["SELECT * FROM categories"]))
 
 (defn get-category [con id]
-  (first (jdbc/query con ["SELECT * FROM categories WHERE id = ?", (have integer? id)])))
+  (first (jdbc/query con ["SELECT * FROM categories WHERE id = ?", id])))
 
 (defn insert-category! [con category]
-  (let [[{id :id}] (jdbc/insert! con :categories (have map? category))]
+  (let [[{id :id}] (jdbc/insert! con :categories category)]
     id))
 
 (defn update-category! [con id category]
-  (let [[n] (jdbc/update! con :categories (have map? category) ["id = ?", (have integer? id)])]
+  (let [[n] (jdbc/update! con :categories category ["id = ?", id])]
     (> n 0)))
 
 (defn delete-category! [con id]
-  (let [[n] (jdbc/delete! con :categories ["id = ?", (have integer? id)])]
+  (let [[n] (jdbc/delete! con :categories ["id = ?", id])]
     (> n 0)))
 
 
@@ -90,7 +89,6 @@
 ; We do a limited amount of decoding of row values into more usable Clojure
 ; collections.
 ;
-
 
 (defn ^:private decode-splits
   "Decodes a sequence of split rows."
@@ -109,16 +107,18 @@
       (update :splits decode-splits)))
 
 (defn ^:private encode-tags
-  "Encodes the tags in a transaction map."
+  "Encodes a vector of tags for storage."
   [tags]
-  (->> tags (filter string?) (remove empty?) (to-array)))
+  (let [xform (comp (filter string?)
+                    (remove empty?)
+                    (map str/lower-case))]
+    (to-array (eduction xform tags))))
 
 (defn ^:private encode-transaction
   "Encodes a map of transaction values for storage."
   [txn]
-  (cond-> txn
-    true (select-keys [:date :category_id :title :description :tags])
-    (contains? txn :tags) (update :tags encode-tags)))
+  (cond-> (select-keys txn [:date :category_id :title :description :tags])
+          (contains? txn :tags) (update :tags encode-tags)))
 
 (defn ^:private encode-split
   "Encodes a map of split values for storage."
@@ -140,23 +140,101 @@
   (when-not (zero? (transduce (map :amount) + splits))
     (throw (IllegalArgumentException. "Splits do not sum to 0"))))
 
+
+(defmulti ^:private txn-param->clause
+  "Renders get-transactions query parameters into WHERE clauses."
+  first)
+
+(defmethod txn-param->clause :id
+  [[_ id]]
+  ["id = ?", id])
+
+(defmethod txn-param->clause :before
+  [[_ [date id]]]
+  ["(date < ? OR (date = ? AND id < ?))", date date id])
+
+(defmethod txn-param->clause :after
+  [[_ [date id]]]
+  ["(date > ? OR (date = ? AND id > ?))", date date id])
+
+(defmethod txn-param->clause :date
+  [[_ args]]
+  (match [args]
+    [(date :guard string?)] ["date = ?", date]
+    [[:lt date]] ["date < ?", date]
+    [[:le date]] ["date <= ?", date]
+    [[:ge date]] ["date >= ?", date]
+    [[:gt date]] ["date > ?", date]
+    [[:in start end]] ["date >= ? AND date <= ?", start end]))
+
+(defmethod txn-param->clause :category_id
+  [[_ values]]
+  (match [values]
+    [(id :guard integer?)] ["category_id = ?", id]
+    [[:anyof & (ids :guard not-empty)]] ["ARRAY[category_id] <@ ?", (to-array (set (have integer? :in ids)))]
+    [[:allof & (ids :guard not-empty)]] ["ARRAY[category_id] @> ?", (to-array (set (have integer? :in ids)))]))
+
+(defmethod txn-param->clause :text
+  [[_ values]]
+  (let [where "(to_tsvector('english', title || ' ' || description) @@ to_tsquery('english', ?))"]
+    (match [values]
+      [(word :guard string?)] [where, word]
+      [[:anyof & (words :guard not-empty)]] [where, (str/join " | " (set (have string? :in words)))]
+      [[:allof & (words :guard not-empty)]] [where, (str/join " & " (set (have string? :in words)))])))
+
+(defmethod txn-param->clause :tag
+  [[_ values]]
+  (letfn [(tag-array [tags]
+            (to-array (map str/lower-case (have string? :in tags))))]
+    (match [values]
+      [(tag :guard string?)] ["tags && ?", (tag-array [tag])]
+      [[:anyof & (tags :guard not-empty)]] ["tags && ?", (tag-array (set (have string? :in tags)))]
+      [[:allof & (tags :guard not-empty)]] ["tags @> ?", (tag-array (set (have string? :in tags)))])))
+
+(defmethod txn-param->clause :person_id
+  [[_ values]]
+  (match [values]
+    [(id :guard integer?)]
+    ["t.id IN (SELECT transaction_id FROM splits WHERE person_id = ?)", id]
+
+    [[:anyof & (ids :guard not-empty)]]
+    ["t.id IN (SELECT transaction_id FROM splits WHERE ARRAY[person_id] && ?)",
+     (to-array (set (have integer? :in ids)))]
+
+    ; Defines a filtered splits table for each person_id we're looking for,
+    ; then inner-joins them all together.
+    [[:allof & (ids :guard not-empty)]]
+    (let [ids (vec (sort (set ids)))
+          from-clause (reduce #(if (empty? %1)
+                                 (format "splits AS s%d" %2)
+                                 (format "%s JOIN splits AS s%d USING (transaction_id)" %1 %2))
+                        "" ids)
+          where-clause (str/join " AND " (map #(format "(s%d.person_id = ?)" %) ids))]
+      (concat [(str "t.id IN (SELECT transaction_id FROM " from-clause " WHERE " where-clause ")")] ids))))
+
+(defmethod txn-param->clause :default [_] [])
+
+
 (defn get-transactions
   "Returns a sequence of transactions. The optional second argument is a
   where-vector (string followed by params)."
   ([con]
-   (get-transactions con nil))
+   (get-transactions con {}))
 
-  ([con [where & params]]
-   (let [query (str "SELECT t.id, t.created_at, t.updated_at, t.date, t.category_id, t.title, t.description, t.tags, json_agg(s) AS splits"
+  ([con query-params]
+   (let [[where & params] (where-join "AND" (map txn-param->clause query-params))
+         query (str "SELECT t.id, t.created_at, t.updated_at, t.date, t.category_id, t.title, t.description, t.tags, json_agg(s) AS splits"
                     " FROM transactions AS t LEFT OUTER JOIN splits AS s ON (s.transaction_id = t.id)"
-                    (if where (str " WHERE " where) "")
+                    (if where (str " WHERE " where))
                     " GROUP BY t.id"
-                    " ORDER BY date, id")]
+                    " ORDER BY date, id"
+                    (if-let [limit (:limit query-params)] (str " LIMIT " limit)))]
+     ;(println query ";" params)
      (map decode-transaction
-          (jdbc/query con (concat [query] params))))))
+       (jdbc/query con (concat [query] params))))))
 
 (defn get-transaction [con id]
-  (first (get-transactions con ["id = ?", id])))
+  (first (get-transactions con {:id id})))
 
 (defn insert-transaction!
   "Creates a new transaction. The values should be a map similar to the one
@@ -211,12 +289,12 @@
   (let [[n] (jdbc/delete! con :transactions ["id = ?", txn_id])]
     (> n 0)))
 
+
 ;
 ; Templates
 ;
 ; Templates are like transactions, minus a few fields.
 ;
-
 
 (defn ^:private decode-template
   "Decodes a template row."
@@ -228,9 +306,8 @@
 (defn ^:private encode-template
   "Encodes a map of template values for storage."
   [tmpl]
-  (cond-> tmpl
-    true (select-keys [:category_id :title :description :tags])
-    (contains? tmpl :tags) (update :tags encode-tags)))
+  (cond-> (select-keys [:category_id :title :description :tags])
+          (contains? tmpl :tags) (update :tags encode-tags)))
 
 (defn get-templates
   "Returns all templates."
@@ -279,6 +356,10 @@
 ; Misc
 ;
 
+(defn all-tags
+  "Returns a list of all known transaction tags."
+  [con]
+  (map :tag (jdbc/query con ["SELECT DISTINCT unnest(tags) AS tag FROM transactions"])))
 
 (defn get-totals
   "Returns all rows from the totals table."

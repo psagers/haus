@@ -72,5 +72,3 @@
         resp (handler req)]
     (is (= 200 (:status resp)))
     (is (= {:id id, :name "Alicia"} (util/response-json resp) (db/get-person *db-con* id)))))
-
-(deftest test-delete-person)

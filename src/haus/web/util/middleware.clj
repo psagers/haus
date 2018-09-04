@@ -1,8 +1,10 @@
 (ns haus.web.util.middleware
   (:require [clojure.java.jdbc :as jdbc]
+            [failjure.core :as f]
             [haus.core.config :as config]
             [haus.db :as db]
-            [haus.web.util.http :refer [bad-request conflict]]
+            [haus.web.util.http :refer [bad-request conflict server-error]]
+            [ring.util.response :refer [response?]]
             [slingshot.slingshot :refer [try+]]
             [taoensso.timbre :as timbre])
   (:import (java.sql SQLIntegrityConstraintViolationException)))
@@ -20,11 +22,11 @@
         (handler (assoc req :db-con con)))
       (handler req))))
 
-(defn default-errors [handler]
+(defn wrap-errors [handler]
   (fn [req]
     (try+
      (handler req)
+     (catch response? response
+       response)
      (catch SQLIntegrityConstraintViolationException e
-       (conflict (.getMessage e)))
-     (catch [:what :haus.web.util.json/invalid] obj
-       (bad-request (select-keys obj [:message]))))))
+       (conflict (.getMessage e))))))

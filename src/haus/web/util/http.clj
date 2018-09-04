@@ -1,5 +1,6 @@
 (ns haus.web.util.http
   (:require [clojure.string :as str]
+            [failjure.core :as f]
             [ring.util.response :as resp]
             [taoensso.truss :refer [have]]))
 
@@ -32,44 +33,50 @@
 (defn resource-methods
   "Returns the HTTP methods (as strings) supported by a multi-method resource."
   [handler]
-  (->> (keys (methods handler))
-       (remove #{:default})
-       (map name)
-       (map str/upper-case)))
+  (sequence (comp (remove #{:default})
+                  (map name)
+                  (map str/upper-case))
+    (keys (methods handler))))
 
 (defn header-allow
   "Adds an Allow header with the given HTTP methods. The methods are assumed to
   be valid upper-case strings."
   [resp allow]
-  (update-in resp [:headers "Allow"] (str/join ", " allow)))
+  (assoc-in resp [:headers "Allow"] (str/join ", " allow)))
 
 
 ;
 ; Responses
 ;
 
+; A FinalResponse is a ring response that should halt the current request
+; handler and be returned immediately. This is normally used for failures, so
+; it integrates with the failjure library.
+(defrecord FinalResponse [status headers body]
+  f/HasFailed
+  (failed? [self] true)
+  (message [self] (:body self)))
 
-(defmacro make-error-response
+(defmacro make-final-response
   "Macro to generate common error responses."
   [name status]
   `(defn ~name
+     ~(str "Generates an HTTP " status " response.")
      ([]
       (~name ""))
      ([body#]
-      (-> (resp/response body#) (resp/status ~status)))))
+      (->FinalResponse ~status {} body#))))
 
-(make-error-response bad-request 400)
-(make-error-response conflict 409)
-(make-error-response server-error 500)
+(make-final-response bad-request 400)
+(make-final-response conflict 409)
+(make-final-response server-error 500)
 
 (defn method-not-allowed
   "This requires a sequence of HTTP methods for the Allow header."
   ([allow]
    (method-not-allowed allow ""))
   ([allow body]
-   (-> (resp/response body)
-       (resp/status 405)
-       (header-allow allow))))
+   (->FinalResponse 405 {"Allow" (str/join ", " allow)} body)))
 
 (defn url-join
   "Joins a sequence of URI path components into a single path. This does not do

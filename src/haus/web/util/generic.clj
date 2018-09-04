@@ -1,6 +1,7 @@
 (ns haus.web.util.generic
   (:require [compojure.route :refer [not-found]]
-            [haus.web.util.http :refer [bad-request url-join]]
+            [failjure.core :as f]
+            [haus.web.util.http :refer [url-join]]
             [haus.web.util.json :as json]
             [ring.util.request :refer [request-url]]
             [ring.util.response :refer [created response]]
@@ -19,8 +20,8 @@
 (defn new-obj!
   "Generic handler for creating a new object."
   [{con :db-con, body :body, :as req} {:keys [insert-fn]} schema]
-  (let [obj (json/conform! schema body)
-        obj_id (insert-fn con obj)]
+  (f/attempt-all [obj (json/conform schema body)
+                  obj_id (insert-fn con obj)]
     (created (url-join (request-url req) (have int? obj_id)))))
 
 (defn get-obj
@@ -33,7 +34,7 @@
 (defn update-obj!
   "Generic handler for updating an existing object."
   [{con :db-con, {id :id} :params, body :body} {:keys [update-fn get-fn]} schema]
-  (let [obj (json/conform! schema body)]
+  (f/attempt-all [obj (json/conform schema body)]
     (if (update-fn con id obj)
       (response (get-fn con id))
       (not-found ""))))

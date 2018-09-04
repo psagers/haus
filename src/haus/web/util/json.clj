@@ -1,13 +1,20 @@
 (ns haus.web.util.json
-  "Tools for validating against JSON schemas. Schemas are loaded from resource
-  files and used to validate JSON data before it's converted to Clojure data
-  structures."
-  (:require [clojure.string :as str])
-  (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
+  "Tools for working with JSON, both input and output."
+  (:require [clojure.string :as str]
+            [failjure.core :as f]
+            [haus.web.util.http :refer [bad-request]]
+            [slingshot.slingshot :refer [throw+]])
+  (:import (com.fasterxml.jackson.core JsonParseException)
+           (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.github.fge.jsonschema.core.report ProcessingReport)
            (com.github.fge.jsonschema.main JsonSchema JsonSchemaFactory)))
 
-(def ^:private json-node? (partial instance? JsonNode))
+
+;
+; Functions for validating against JSON schemas. Schemas are loaded from
+; resource files and used to validate JSON data before it's converted to
+; Clojure data structures.
+;
 
 (defn ^:private node->clj
   "Converts a JsonNode to a Clojure data structure."
@@ -32,14 +39,8 @@
                          (.isNumber node) (if bigdecimals? (.decimalValue node) (.doubleValue node))
                          (.isBoolean node) (.booleanValue node)
                          (.isNull node) nil
-                         :else nil))] ;(assert false (str "Unhandled JsonNode type: " node))))]
+                         :else (assert false (str "Unhandled JsonNode type: " node))))]
      (node->clj' node))))
-
-(defn ^:private ->node
-  "Loads JSON into a JsonNode. This accepts a variety of source types,
-  including strings and InputStreams."
-  ^JsonNode [source]
-  (-> (ObjectMapper.) (.readTree source)))
 
 (defn load-schema
   "Loads a schema from resources/json-schema."
@@ -48,56 +49,62 @@
         uri (str "resource:/json-schema/" filename)]
     (.getJsonSchema factory uri)))
 
-(defn validate
-  "Validates a JSON value against a schema and returns the ProcessingReport.
-  The value may be a JsonNode or anything that can be converted to one."
-  ^ProcessingReport [^JsonSchema schema value]
-  (let [value (if-not (json-node? value) (->node value) value)]
-    (.validate schema value)))
-
-(defn valid?
-  "Returns true iff the given JSON validates against the schema. Use
-  load-schema to load your schema from disk."
-  ^ProcessingReport [^JsonSchema schema value]
-  (.isSuccess (validate schema value)))
+(defn ^:private report-message
+  "Renders a ProcessingReport into a human-readable string."
+  [^ProcessingReport report]
+  (let [error (node->clj (.asJson (first report)))]
+    (str/join ": " (remove empty? [(get-in error [:instance :pointer])
+                                   (get error :message)]))))
 
 (defn conform
-  "Given a JsonSchema and JSON source, this validates the value and, if
-  successful, returns it as a Clojure data structure. Returns nil if validation
-  fails. Accepts an option map with :keywords? and :bigdecimals?, both
-  defaulting to true."
-  ([^JsonSchema schema value]
-   (conform schema value {}))
+  "Validates a request body against a JSON schema. Returns either the decoded
+  value or an HTTP response with an error status. Accepts an option map with
+  :keywords? and :bigdecimals?, both defaulting to true.
+  
+  The body can be either an InputStream or a string."
+  ([^JsonSchema schema body]
+   (conform schema body {}))
 
-  ([^JsonSchema schema value opts]
-   (let [node (->node value)]
-     (if (valid? schema node)
-       (node->clj node opts)
-       nil))))
-
-(defmacro throw-invalid
-  "Throws an ExcptionInfo indicating failed JSON validation."
-  [msg]
-  `(throw (ex-info ~msg ~{:what ::invalid})))
-
-(defn throw-processing-report
-  [report]
-  (let [error (node->clj (.asJson (first report)))
-        msg (str/join ": " (remove empty? [(get-in error [:instance :pointer])
-                                           (get error :message)]))]
-    (throw-invalid msg)))
+  ([^JsonSchema schema body opts]
+   (try
+     (let [node (-> (ObjectMapper.) (.readTree body))
+           report (.validate schema node)]
+       (if (.isSuccess report)
+         (node->clj node opts)
+         (bad-request (report-message report))))
+     (catch JsonParseException e
+       (bad-request (.getMessage e))))))
 
 (defn conform!
-  "Given a JsonSchema and JSON source, this validates the value and, if
-  successful, returns it as a Clojure data structure. Throws an ExceptionInfo
-  with {:what :haus.web.util.json/invalid} on failure. Accepts an option map
-  with :keywords? and :bigdecimals?, both defaulting to true."
-  ([^JsonSchema schema value]
-   (conform! schema value {}))
+  "Calls conform and throws the result if it's an error."
+  [& args]
+  (f/when-let-failed? [err (apply conform args)]
+    (throw+ err)))
 
-  ([^JsonSchema schema value opts]
-   (let [node (->node value)
-         report (validate schema node)]
-     (if (.isSuccess report)
-       (node->clj node opts)
-       (throw-processing-report report)))))
+
+;
+; Functions for interfacting with JDBC
+;
+; clj-time monkey-patches jdbc, so the date types are a little unpredictable,
+; depending on whether clj-time has been loaded.
+;
+
+(defmulti encode-timestamp class)
+
+(defmethod encode-timestamp java.sql.Timestamp
+  [^java.sql.Timestamp datetime]
+  (quot (.getTime datetime) 1000))
+
+(defmethod encode-timestamp org.joda.time.DateTime
+  [^org.joda.time.DateTime datetime]
+  (quot (.getMillis datetime) 1000))
+
+(defmulti encode-date class)
+
+(defmethod encode-date java.sql.Date
+  [^java.sql.Date date]
+  (str date))
+
+(defmethod encode-date org.joda.time.DateTime
+  [^org.joda.time.DateTime date]
+  (.print (org.joda.time.format.DateTimeFormat/forPattern "yyyy-MM-dd") date))

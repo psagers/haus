@@ -3,17 +3,18 @@
             [compojure.route :refer [not-found]]
             [haus.web.categories :as categories]
             [haus.web.people :as people]
-            [haus.web.util.middleware :refer [default-errors with-db
-                                              with-logging]]
+            [haus.web.transactions :as transactions]
+            [haus.web.util.middleware :refer [with-db with-logging wrap-errors]]
             [ring.middleware.head :refer [wrap-head]]
             [ring.middleware.json :refer [wrap-json-response]]
-            [ring.middleware.lint :refer [wrap-lint]]
+            [ring.middleware.nested-params :refer [wrap-nested-params]]
             [ring.middleware.params :refer [wrap-params]]
             [taoensso.timbre :as timbre]))
 
 (defroutes routes
   (context "/people" [] people/routes)
   (context "/categories" [] categories/routes)
+  (context "/transactions" [] transactions/routes)
   (ANY "*" [] (not-found "")))
 
 (defn init []
@@ -21,10 +22,10 @@
 
 (def handler
   (-> routes
-      (default-errors)
+      (wrap-errors)
+      ;(wrap-nested-params)
       (wrap-params)
       (wrap-json-response)
-      (wrap-lint)
+      (wrap-head)
       (with-db)
-      (with-logging)
-      (wrap-head)))
+      (with-logging)))
