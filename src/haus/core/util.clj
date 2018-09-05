@@ -1,17 +1,29 @@
 (ns haus.core.util
-  (:require [failjure.core :as f]
+  (:require [clojure.walk :as walk]
+            [failjure.core :as f]
             [taoensso.truss :refer [have]]))
 
 ;
 ; Miscellaneous Clojure utilities.
 ;
 
-(def scalar? (complement coll?))
-
 (defn re-pred
   "Turns a regular expression into a predicate."
   [re]
   (every-pred string? (partial re-matches re)))
+
+(def scalar? (complement coll?))
+(def digits? (re-pred #"^\d+$"))
+(def sql-date? (re-pred #"^\d\d\d\d-\d\d-\d\d$"))
+(def tag? (re-pred #"(?i)^[a-z][\w-]*$"))
+
+(defn to-int [value]
+  (Integer/parseInt value))
+
+(defn unqualify
+  "Removes the namespace from a qualified keyword."
+  [kw]
+  (keyword (name (have keyword? kw))))
 
 (defn map-vals
   "Transforms a map by applying a function to each value."
@@ -20,12 +32,19 @@
 
 (defn map-kv
   "Applies a function to each key-value pair in a map and returns a new map
-  with the results."
+  with the updated values."
   [f m]
   (reduce-kv #(assoc %1 %2 (f %2 %3)) {} m))
 
 (defn have-instance? [cls value]
   (have (partial instance? cls) value))
+
+(defn keywordize-keys-safe
+  "Like clojure.walk/keywordize-keys, but with find-keyword. Safe for untrusted
+  data."
+  [m]
+  (let [f (fn [[k v]] (if (string? k) [(find-keyword k) v] [k v]))]
+    (walk/postwalk (fn [x] (if (map? x) (into {} (map f x)) x)) m)))
 
 (defn until-failed
   "Returns a lazy sequence of items from coll util it encounters a failure.
