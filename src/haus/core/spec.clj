@@ -1,39 +1,89 @@
 (ns haus.core.spec
   "Wrappers and utilities for spec."
   (:require [clojure.spec.alpha :as s]
-            [haus.core.util :as util]))
+            [clojure.spec.gen.alpha :as gen]
+            [haus.core.util :as util :refer [unqualify]])
+  (:import (org.joda.time DateTime)))
 
 
 (defn simple-conformer
   "A wrapper around s/conformer that takes a predicate and parse function."
-  [pred parse]
-  (s/conformer #(if (pred %) (parse %) ::s/invalid)))
+  ([pred parse]
+   (simple-conformer pred parse identity))
+
+  ([pred parse unparse]
+   (s/conformer #(if (pred %) (parse %) ::s/invalid) unparse)))
+
+
+(def pos-int-32 (s/int-in 1 0x80000000))
+
+(def int-like
+  "A spec that conforms integers in either native or string form. This does not
+  unform, but is idempotent."
+  (letfn [(conform-value [value]
+            (cond
+              (integer? value) value
+              (util/digits? value) (Integer/parseInt value)
+              :else ::s/invalid))]
+    (s/conformer conform-value identity)))
+
+(def sql-timestamp
+  "A spec that matches Inst and generates java.sql.Timestamp."
+  (s/with-gen inst?
+              (fn [] (gen/fmap #(java.sql.Timestamp. (* % 1000))
+                               (gen/choose 1420099200 1577865600)))))
+
+(def sql-date
+  "A spec that matches Inst and generates java.sql.Date."
+  (s/with-gen inst?
+              (fn [] (gen/fmap #(java.sql.Date. (* % 1000))
+                               (gen/choose 1420099200 1577865600)))))
+
+(def java-date
+  "A spec that matches Inst and generates java.util.Date."
+  (s/with-gen inst?
+              (fn [] (gen/fmap #(java.util.Date. (* % 1000))
+                               (gen/choose 1420099200 1577865600)))))
+
+
+(def joda-datetime
+  "A spec that matches and generates org.joda.time.DateTime."
+  (s/with-gen (partial instance? org.joda.time.DateTime)
+              (fn [] (gen/fmap #(org.joda.time.DateTime. (* % 1000))
+                               (gen/choose 1420099200 1577865600)))))
+
+(def sql-date-str
+  "A spec that matches SQL date strings and generates java.sql.Date."
+  (s/with-gen util/sql-date-str?
+              (fn [] (gen/fmap #(str (java.sql.Date. (* % 1000)))
+                               (gen/choose 1420099200 1577865600)))))
 
 (defn token
-  "A spec helper that defines a string token to be keywordized. Takes one or
-  more valid token values as arguments."
-  [& values]
-  (simple-conformer (set values) keyword))
+  "A spec that defines a string token to be keywordized. Takes a (string)
+  namespace for the conformed keywords (nil is fine) and a collection of
+  acceptable string values. This does not unform, but is idempotent."
+  [key-ns & values]
+  (let [pred (set values)
+        conform-value (fn [value]
+                        (cond
+                          (pred value) (keyword key-ns value)
+                          (and (qualified-keyword? value)
+                               (= (namespace value) key-ns)
+                               (pred (name value))) value
+                          :else ::s/invalid))]
+    (s/conformer conform-value identity)))
 
-(defmacro flat-or
-  "Like s/or, but removes the extra layer of structure."
-  [& args]
-  `(s/and
-     (s/or ~@args)
-     (s/conformer second)))
 
 (defn ^:private valid-keys
-  "Returns the set of valid keys from the arguments of s/keys."
-  [key-args]
-  (let [key-args (apply array-map key-args)
-        qualified (concat (get key-args :req []) (get key-args :opt []))
-        unqualified (map util/unqualify (concat (get key-args :req-un []) (get key-args :opt-un [])))]
-    (set (concat qualified unqualified))))
+  "Takes the same arguments as s/keys, but just returns all valid keys."
+  [& {:keys [req opt req-un opt-un]
+      :or {req [], opt [], req-un [], opt-un []}}]
+  (set (concat req opt (map unqualify req-un) (map unqualify opt-un))))
 
 (defmacro strict-keys
   "Like s/keys, but fails if there are any extra keys."
   [& args]
-  (let [valid (valid-keys args)]
+  (let [valid (apply valid-keys args)]
     `(s/and
        (s/keys ~@args)
        #(every? ~valid (keys %)))))
@@ -41,7 +91,7 @@
 (defmacro exclusive-keys
   "Like s/keys, but removes any extra keys."
   [& args]
-  (let [valid (valid-keys args)]
+  (let [valid (apply valid-keys args)]
     `(s/and
        (s/keys ~@args)
-       (s/conformer #(select-keys % ~valid)))))
+       (s/conformer #(select-keys % ~valid) identity))))

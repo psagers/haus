@@ -3,6 +3,7 @@
             [clojure.core.match :refer [match]]
             [taoensso.truss :refer [have]]))
 
+
 (defn where-join
   "Joins multiple WHERE clauses with a logical operator. Parentheses will be
   added as needed. Each clause should be a vector with a WHERE string followed

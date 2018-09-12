@@ -15,32 +15,31 @@
 
 (defn ^:private setlike
   [item]
-  (spec/flat-or :exact item
-           :multi (s/cat :op (spec/token "allof" "anyof")
-                         :values (s/+ item))))
+  (s/or :exact item
+        :multi (s/cat :op (spec/token nil "allof" "anyof")
+                      :values (s/+ item))))
 
-(s/def ::int-string (spec/simple-conformer util/digits? util/to-int))
 (s/def ::tag-string (spec/simple-conformer util/tag? str/lower-case))
-(s/def ::pk (s/tuple util/sql-date? ::int-string))
+(s/def ::pk (s/tuple util/sql-date-str? spec/int-like))
 
 
 (s/def ::before ::pk)
 (s/def ::after ::pk)
 
 (s/def ::date
-  (spec/flat-or :exact util/sql-date?
-           :comp (s/tuple (spec/token "lt" "le" "ge" "gt") util/sql-date?)
-           :range (s/tuple (spec/token "in") util/sql-date? util/sql-date?)))
+  (s/or :exact util/sql-date-str?
+        :comp (s/tuple (spec/token nil "lt" "le" "ge" "gt") util/sql-date-str?)
+        :range (s/tuple (spec/token nil "in") util/sql-date-str? util/sql-date-str?)))
 
-(s/def ::category_id (setlike ::int-string))
+(s/def ::category_id (setlike (s/and spec/int-like pos-int?)))
 (s/def ::text (setlike string?))
 (s/def ::tag (setlike ::tag-string))
-(s/def ::person_id (setlike ::int-string))
-(s/def ::limit ::int-string)
+(s/def ::person_id (setlike (s/and spec/int-like pos-int?)))
+(s/def ::limit (s/and spec/int-like pos-int?))
 
 (s/def ::params
-  (spec/exclusive-keys :opt-un [::before ::after ::date ::category_id ::text
-                                ::tag ::person_id ::limit]))
+  (s/keys :opt-un [::before ::after ::date ::category_id ::text
+                   ::tag ::person_id ::limit]))
 
 
 ;

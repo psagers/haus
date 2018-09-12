@@ -1,10 +1,15 @@
 (ns haus.test.util
   (:require [clojure.data.json :as json]
             [clojure.java.jdbc :as jdbc]
+            [clojure.string :as str]
             [clojure.test :refer [is]]
             [haus.db :as db]
+            [haus.db.migrate :as migrate]
+            [ring.mock.request :as mock]
             [ring.util.response :refer [find-header]]
             [taoensso.timbre :as timbre]))
+
+(def ^:dynamic *db-con* nil)
 
 (defn with-logging
   [f]
@@ -20,12 +25,13 @@
     (jdbc/execute! @db/*db-spec* [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})
     (jdbc/execute! @db/*db-spec* [(str "CREATE DATABASE " dbname " TEMPLATE template0 LC_COLLATE 'en_US.UTF-8'")] {:transaction? false})
 
-    ; Switch to the test DB.
+    ; Switch to the test DB. Tests must use the request function below to
+    ; install this connection into mock requests.
     (try
       (binding [db/*db-spec* (delay test-db-spec)]
-        (db/migrate)
+        (migrate/migrate)
         (jdbc/with-db-connection [con @db/*db-spec*]
-          (binding [db/*db-con* (delay con)]
+          (binding [*db-con* con]
             (f))))
       (finally
         (jdbc/execute! @db/*db-spec* [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})))))
@@ -35,7 +41,7 @@
   This supports both fast lein tests and repl interaction, but we have to be
   careful not to reenter."
   [f]
-  (if (map? @db/*db-con*)
+  (if (nil? *db-con*)
     (run-with-test-db f)
     (f)))
 
@@ -43,27 +49,34 @@
   "Executes a test in a single transaction, which will be rolled back at the
   end."
   [f]
-  (jdbc/with-db-transaction [t-con @db/*db-con*]
+  (jdbc/with-db-transaction [t-con *db-con*]
     (jdbc/db-set-rollback-only! t-con)
-    (binding [db/*db-con* (delay t-con)]
+    (binding [*db-con* t-con]
       (f))))
 
 (defmacro use-fixtures
-  "Every test namespace should call this to install our database fixtures. Pass
-  additional :each fixtures as arguments."
-  [& each]
+  "Every test namespace should call this to install our database fixtures."
+  []
   `(do
      (clojure.test/use-fixtures :once with-logging with-db)
-     (clojure.test/use-fixtures :each with-transaction ~@each)))
+     (clojure.test/use-fixtures :each with-transaction)))
 
-(defn response-content-type
-  "Returns the content-type of a response (ignoring parameters)."
+(defn request
+  "Returns a mock request with our database connection attached."
+  [& args]
+  (-> (apply mock/request args)
+      (assoc :db-con *db-con*)))
+
+(defn response-mimetype
+  "Returns the mimetype of a response (ignoring content-type parameters)."
   [response]
-  (if-let [content-type (second (find-header response "content-type"))]
-    (second (re-find #"^(.*?)(?:;|$)" content-type))))
+  (some-> (find-header response "content-type")
+          (second)
+          (str/split #";")
+          (first)))
 
 (defn response-json
   "Decodes the body of a response as JSON."
   [response]
-  (is (= "application/json" (response-content-type response)))
+  (is (= "application/json" (response-mimetype response)))
   (json/read-str (:body response), :key-fn keyword))

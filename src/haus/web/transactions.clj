@@ -29,7 +29,7 @@
 
 
 (def ^:private digits? (re-pred #"^\d$"))
-(def ^:private sql-date? (re-pred #"^\d\d\d\d-\d\d-\d\d$"))
+(def ^:private sql-date-str? (re-pred #"^\d\d\d\d-\d\d-\d\d$"))
 (def ^:private tag? (re-pred #"(?i)^[a-z][\w-]*$"))
 
 (defn ^:private to-int [value]
@@ -39,7 +39,7 @@
   "Implementation for :before and :after."
   [[key value]]
   (match [value]
-    [[(date :guard sql-date?) (id :guard digits?)]]  [(keyword key) [date (Integer/parseInt id)]]
+    [[(date :guard sql-date-str?) (id :guard digits?)]]  [(keyword key) [date (Integer/parseInt id)]]
     :else  (http/bad-request (format "'%s' takes two arguments: a SQL date and an integer." key))))
 
 (defn ^:private conform-setlike-param
@@ -76,13 +76,13 @@
 (defmethod conform-param :date
   [[_ value]]
   (match [value]
-    [(date :guard sql-date?)]
+    [(date :guard sql-date-str?)]
     [:date date]
 
-    [[(op :guard #{"lt" "le" "ge" "gt"}) (date :guard sql-date?)]]
+    [[(op :guard #{"lt" "le" "ge" "gt"}) (date :guard sql-date-str?)]]
     [:date [(keyword op) date]]
 
-    [["in" (date1 :guard sql-date?) (date2 :guard sql-date?)]]
+    [["in" (date1 :guard sql-date-str?) (date2 :guard sql-date-str?)]]
     [:date [:in date1 date2]]
 
     :else

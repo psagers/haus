@@ -14,15 +14,25 @@
     (timbre/with-level (config/log-level)
       (handler req))))
 
-(defn with-db [handler]
+(defn with-db
+  "Ensures that we have a database connection in @db/*db-con*. This will not
+  overwrite an existing connection, primarily to avoid interfering with test
+  transactions.
+  
+  TODO: Add connection pooling."
+  [handler]
   (fn [req]
-    ; Mock requests from the tests will have their own database connections.
-    (if-not (contains? req :db-con)
+    (if (= db/*db-con* db/*db-spec*)
       (jdbc/with-db-connection [con @db/*db-spec*]
-        (handler (assoc req :db-con con)))
+        (binding [db/*db-con* (delay con)]
+          (handler req)))
       (handler req))))
 
-(defn wrap-errors [handler]
+(defn wrap-errors
+  "Adds some default error handlers. If you throw+ a response, we'll just
+  return that. Other exceptions may be transated to reasonable HTTP status
+  codes before falling back on the default 500."
+  [handler]
   (fn [req]
     (try+
      (handler req)

@@ -1,76 +1,25 @@
 (ns haus.test.categories_test
-  (:require [clojure.test :refer [deftest is testing]]
-            [haus.test.util :as util :refer [*db-con*]]
-            [haus.db :as db]
-            [haus.web :refer [handler]]
-            [ring.mock.request :refer [json-body]]
-            [ring.util.response :refer [find-header]]))
+  (:require [clojure.spec.alpha :as s]
+            [clojure.spec.gen.alpha :as gen]
+            [clojure.test :refer [deftest is]]
+            [haus.core.util :refer [submap?]]
+            [haus.db.categories :as categories]
+            [haus.test.util :as util]))
+
 
 (util/use-fixtures)
 
-(deftest test-get-categories
-  (testing "Empty"
-    (let [req (util/request :get "/categories")
-          resp (handler req)]
-      (is (= 200 (:status resp)))
-      (is (empty? (util/response-json resp)))))
 
-  (testing "Found"
-    (db/insert-category! *db-con* {:name "Expenses"})
-    (db/insert-category! *db-con* {:name "Payments"})
+(def params-spec (s/keys :req [::categories/name]))
 
-    (let [req (util/request :get "/categories")
-          resp (handler req)]
-      (is (= 200 (:status resp)))
-      (is (= '("Expenses" "Payments")
-             (sort (map :name (util/response-json resp))))))))
 
-(deftest test-get-category
-  (testing "Invalid id"
-    (let [req (util/request :get "/categories/bogus")
-          resp (handler req)]
-      (is (= 404 (:status resp)))))
-
-  (testing "Not found"
-    (let [req (util/request :get "/categories/1")
-          resp (handler req)]
-      (is (= 404 (:status resp)))))
-
-  (testing "Found"
-    (let [id (db/insert-category! *db-con* {:name "Expenses"})
-          req (util/request :get (str "/categories/" id))
-          resp (handler req)]
-      (is (= 200 (:status resp)))
-      (is (= "Expenses" (:name (util/response-json resp)))))))
-
-(deftest test-new-category-fail
-  (testing "Invalid body"
-    (let [req (-> (util/request :post "/categories")
-                  (json-body {:namex "Expenses"}))
-          resp (handler req)]
-      (is (= 400 (:status resp)))))
-
-  (testing "Invalid name"
-    (let [req (-> (util/request :post "/categories")
-                  (json-body {:name ""}))
-          resp (handler req)]
-      (is (= 400 (:status resp))))))
-
-(deftest test-new-category
-  (testing "Success"
-    (let [req (-> (util/request :post "/categories")
-                  (json-body {:name "Expenses"}))
-          resp (handler req)]
-      (is (= 201 (:status resp)))
-      (let [location (second (find-header resp "Location"))]
-        (is (.find (.matcher #"/categories/\d+$" location)))))))
-
-(deftest test-update-category
-  (let [id (db/insert-category! *db-con* {:name "Expenses"})
-        req (-> (util/request :put (str "/categories/" id))
-                (json-body {:name "Alicia"}))
-        resp (handler req)]
-    (is (= 200 (:status resp)))
-    (is (= {:id id, :name "Alicia"} (util/response-json resp) (db/get-category *db-con* id)))))
-
-(deftest test-delete-category)
+(deftest categories
+  (doseq [params (gen/sample (s/gen params-spec) 100)]
+    (let [id (categories/insert-category! params)]
+      (is (every? #(submap? params %) (categories/get-categories)))
+      (is (submap? params (categories/get-category id)))
+      (let [params (gen/generate (s/gen params-spec))]
+        (categories/update-category! id params)
+        (is (submap? params (categories/get-category id))))
+      (is (categories/delete-category! id))
+      (is (nil? (categories/get-category id))))))

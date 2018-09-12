@@ -23,14 +23,15 @@
   :target-path "target/%s"
   :profiles {:dev {:dependencies [[ring/ring-mock "0.3.2" :exclusions [cheshire]]
                                   [ring/ring-devel "1.6.3"]
-                                  [circleci/circleci.test "0.4.1"]]
+                                  [circleci/circleci.test "0.4.1"]
+                                  [org.clojure/test.check "0.9.0"]]
                    :repl-options {:init (do (require '[taoensso.timbre])
                                             (taoensso.timbre/set-level! :info))}}
              :warn {:global-vars {*warn-on-reflection* true}}
              :uberjar {:aot :all}}
   :ring {:init haus.web/init
          :handler haus.web/handler}
-  :aliases {"db" ["run" "-m" "haus.db.migrate"]
+  :aliases {"db" ["run" "-m" "haus.db"]
             "test" ["run" "-m" "circleci.test/dir" :project/test-paths]
             "tests" ["run" "-m" "circleci.test"]
             "retest" ["run" "-m" "circleci.test.retest"]})
