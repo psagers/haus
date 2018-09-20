@@ -61,7 +61,7 @@
   [params]
   (let [explanation (s/explain-data ::params params)
         problems (::s/problems explanation)
-        fields (vec (set (map #(get-in % [:path 0]) problems)))
+        fields (vec (distinct (map #(get-in % [:path 0]) problems)))
         messages (zipmap fields (map error-message fields))]
     (f/fail messages)))
 

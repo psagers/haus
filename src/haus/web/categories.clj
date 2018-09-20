@@ -1,60 +1,64 @@
 (ns haus.web.categories
   (:require [compojure.core :refer [ANY defroutes]]
-            [haus.db :as db]
+            [haus.db.categories :as db]
             [haus.web.util.generic :as generic :refer [wrap-id-param]]
             [haus.web.util.http :refer [defresource]]
-            [haus.web.util.json :refer [load-schema]]
             [ring.util.response :refer [response]]))
 
-(def db-fns
-  {:insert-fn db/insert-category!
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Generic options
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def generic-opts
+  {:key-ns "haus.db.categories"
    :get-fn db/get-category
+   :insert-fn db/insert-category!
    :update-fn db/update-category!
    :delete-fn db/delete-category!})
 
+(defn opts-with-spec
+  [spec]
+  (assoc generic-opts :spec spec))
 
-;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; /categories
-;
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defresource categories)
 
 (defmethod categories :get
-  [{con :db-con}]
-  (response (db/get-categories con)))
-
-(def post-categories-schema (delay (load-schema "categories-post.json")))
+  [req]
+  (response (db/get-categories)))
 
 (defmethod categories :post
   [req]
-  (generic/new-obj! req db-fns @post-categories-schema))
+  (generic/new-obj! req (opts-with-spec ::db/insert-params)))
 
 
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; /categories/:id
-;
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defresource category)
 
 (defmethod category :get
   [req]
-  (generic/get-obj req db-fns))
+  (generic/get-obj req generic-opts))
 
-(def put-category-schema (delay (load-schema "category-put.json")))
-
-(defmethod category :put
+(defmethod category :post
   [req]
-  (generic/update-obj! req db-fns @put-category-schema))
+  (generic/update-obj! req (opts-with-spec ::db/update-params)))
 
 (defmethod category :delete
   [req]
-  (generic/delete-obj! req db-fns))
+  (generic/delete-obj! req generic-opts))
 
-;
-;
-;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Routes
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defroutes routes
   (ANY "/" req categories)

@@ -3,23 +3,23 @@
             [clojure.spec.gen.alpha :as gen]
             [clojure.test :refer [deftest is]]
             [haus.core.util :refer [submap?]]
-            [haus.db.categories :as categories]
+            [haus.db.categories :as c]
             [haus.test.util :as util]))
 
 
 (util/use-fixtures)
 
 
-(def params-spec (s/keys :req [::categories/name]))
+(def params-spec (s/keys :req [::c/name]))
 
 
 (deftest categories
   (doseq [params (gen/sample (s/gen params-spec) 100)]
-    (let [id (categories/insert-category! params)]
-      (is (every? #(submap? params %) (categories/get-categories)))
-      (is (submap? params (categories/get-category id)))
+    (let [id (c/insert-category! params)]
+      (is (every? #(submap? params %) (c/get-categories)))
+      (is (submap? params (c/get-category id)))
       (let [params (gen/generate (s/gen params-spec))]
-        (categories/update-category! id params)
-        (is (submap? params (categories/get-category id))))
-      (is (categories/delete-category! id))
-      (is (nil? (categories/get-category id))))))
+        (c/update-category! id params)
+        (is (submap? params (c/get-category id))))
+      (is (c/delete-category! id))
+      (is (nil? (c/get-category id))))))

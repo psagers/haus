@@ -4,11 +4,13 @@
             [clojure.instant :as inst]
             [clojure.java.jdbc :as jdbc]
             [clojure.spec.alpha :as s]
+            [clojure.spec.gen.alpha :as sgen]
             [clojure.string :as str]
             [clojure.test.check.generators :as gen]
             [haus.core.spec :as spec]
             [haus.core.util :as util]
             [haus.db :as db]
+            [haus.db.transactions.query :as q]
             [haus.db.util :refer [where-join]]
             [taoensso.truss :refer [have]]))
 
@@ -17,7 +19,7 @@
 ; Specs
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn sum-split-amounts
+(defn sum-splits
   "A helper function to sum the amounts of a sequence of splits."
   [splits]
   (transduce (map ::amount) + splits))
@@ -26,7 +28,7 @@
   "Generates amount values in a sensible range. This starts at [-]100.00M to
   avoid generating a bunch of 0.0x values. It's cosmetic as much as anything."
   []
-  (gen/let [magnitude (gen/large-integer* {:min 1, :max 9999990000})
+  (gen/let [magnitude (gen/large-integer* {:min 1, :max 999990000})
             sign (gen/elements [-1 1])]
     (-> (bigdec magnitude)
         (+ 9999M)
@@ -51,12 +53,14 @@
 (s/def ::title (s/with-gen (s/and string? #(<= 1 (count %) 50))
                            (fn [] gen/string-ascii)))
 (s/def ::description (s/with-gen string? (fn [] gen/string-ascii)))
-(s/def ::tag (s/with-gen (spec/simple-conformer util/tag? str/lower-case)
-                         (fn [] gen/string-alphanumeric)))
-(s/def ::tags (s/coll-of ::tag))
+(s/def ::tags (s/coll-of spec/tag))
 (s/def ::splits (s/and (s/coll-of ::split)
                        #(or (empty? %) (apply distinct? (map ::person_id %)))
-                       #(zero? (sum-split-amounts %))))
+                       #(zero? (sum-splits %))))
+
+; A single transaction from the database, after decoding.
+(s/def ::transaction (s/keys :req [::id ::created_at ::updated_at ::date ::category_id
+                                   ::title ::description ::tags ::splits]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -71,13 +75,13 @@
               (::amount) (-> value (bigdec) (.setScale 2))
               value))]
     (vec (filter some? (json/read-str splits
-                                      :key-fn (partial keyword (namespace ::a))
+                                      :key-fn (partial keyword (namespace ::_))
                                       :value-fn decode-value)))))
 
 (defn ^:private decode-transaction
   "Decodes a transaction row."
   [row]
-  (-> (util/qualify-keys (namespace ::a) row)
+  (-> (util/qualify-keys (namespace ::_) row)
       (update ::tags vec)
       (update ::splits decode-splits)))
 
@@ -113,7 +117,9 @@
 (defn ^:private encode-split
   "Encodes a map of split values for storage."
   [split]
-  (select-keys split [::person_id ::amount]))
+  (-> split
+      (select-keys [::person_id ::amount])
+      (update ::amount #(some-> % (bigdec) (.setScale 2)))))
 
 (defn ^:private encode-splits
   "Encodes a sequence of split values for storage."
@@ -127,7 +133,7 @@
   collectively valid. This is a last-ditch effort to keep the database in a
   sane state; unbalanced splits should be caught and handled higher up."
   [splits]
-  (when-not (zero? (sum-split-amounts splits))
+  (when-not (zero? (sum-splits splits))
     (throw (IllegalArgumentException. "Splits do not sum to 0"))))
 
 
@@ -135,79 +141,90 @@
 ; Query parameters
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmulti ^:private txn-param->clause
+(defmulti ^:private render-query-param
   "Renders get-transactions query parameters into WHERE clauses. Argument is a
-  MapEntry."
+  MapEntry from a conformed ::q/params structure."
   first)
 
-(defmethod txn-param->clause :id
+(defmethod render-query-param ::q/id
   [[_ id]]
   ["id = ?", id])
 
-(defmethod txn-param->clause :before
-  [[_ [date id]]]
+(defmethod render-query-param ::q/before
+  [[_ [[_ date] id]]]
   ["(date < ? OR (date = ? AND id < ?))", date date id])
 
-(defmethod txn-param->clause :after
-  [[_ [date id]]]
+(defmethod render-query-param ::q/after
+  [[_ [[_ date] id]]]
   ["(date > ? OR (date = ? AND id > ?))", date date id])
 
-(defmethod txn-param->clause :date
-  [[_ args]]
-  (match [args]
+(defmethod render-query-param ::q/date
+  [[_ arg]]
+  (match [(s/unform ::q/date arg)]
+    [[:eq date]] ["date = ?", date]
     [[:lt date]] ["date < ?", date]
     [[:le date]] ["date <= ?", date]
     [[:ge date]] ["date >= ?", date]
     [[:gt date]] ["date > ?", date]
-    [[:in start end]] ["date BETWEEN ? AND ?", start end]
-    [date] ["date = ?", date]))
+    [[:in start end]] ["date BETWEEN ? AND ?", start end]))
 
-(defmethod txn-param->clause :category_id
-  [[_ values]]
-  (match [values]
-    [[:anyof & ids]] ["ARRAY[category_id] <@ ?", (to-array (set (have integer? :in ids)))]
-    [[:allof & ids]] ["ARRAY[category_id] @> ?", (to-array (set (have integer? :in ids)))]
-    [id] ["category_id = ?", id]))
+(defmethod render-query-param ::q/category_id
+  [[_ {:keys [op values]}]]
+  (match [op values]
+    [_ [value]] ["category_id = ?", value]
+    [:anyof ids] ["ARRAY[category_id] <@ ?", (to-array (distinct ids))]
+    [:allof ids] ["ARRAY[category_id] @> ?", (to-array (distinct ids))]))
 
-(defmethod txn-param->clause :text
-  [[_ values]]
-  (let [where "(to_tsvector('english', title || ' ' || description) @@ to_tsquery('english', ?))"]
-    (match [values]
-      [[:anyof & words]] [where, (str/join " | " (set (have string? :in words)))]
-      [[:allof & words]] [where, (str/join " & " (set (have string? :in words)))]
-      [word] [where, word])))
+(defmethod render-query-param ::q/text
+  [[_ {:keys [op values]}]]
+  (let [where "to_tsvector('english', title || ' ' || description) @@ to_tsquery('english', ?)"]
+    (case op
+      (:anyof) [where, (str/join " | " (distinct values))]
+      (:allof) [where, (str/join " & " (distinct values))])))
 
-(defmethod txn-param->clause :tag
-  [[_ values]]
-  (letfn [(tag-array [tags]
-            (to-array (map str/lower-case (have string? :in tags))))]
-    (match [values]
-      [[:anyof & tags]] ["tags && ?", (tag-array (set (have string? :in tags)))]
-      [[:allof & tags]] ["tags @> ?", (tag-array (set (have string? :in tags)))]
-      [tag] ["tags && ?", (tag-array [tag])])))
+(defmethod render-query-param ::q/tag
+  [[_ {:keys [op values]}]]
+  (case op
+    (:anyof) ["tags && ?", (to-array (distinct values))]
+    (:allof) ["tags @> ?", (to-array (distinct values))]))
 
-(defmethod txn-param->clause :person_id
-  [[_ values]]
-  (match [values]
-    [[:anyof & ids]]
+(defmethod render-query-param ::q/person_id
+  [[_ {:keys [op values]}]]
+  (match [op values]
+    [_ [id]]
+    ["t.id IN (SELECT transaction_id FROM splits WHERE person_id = ?)", id]
+
+    [:anyof ids]
     ["t.id IN (SELECT transaction_id FROM splits WHERE ARRAY[person_id] && ?)",
-     (to-array (set (have integer? :in ids)))]
+     (to-array (distinct ids))]
 
     ; Defines a filtered splits table for each person_id we're looking for,
     ; then inner-joins them all together.
-    [[:allof & ids]]
-    (let [ids (vec (sort (set ids)))
+    [:allof ids]
+    (let [ids (vec (sort (distinct ids)))
           from-clause (reduce #(if (empty? %1)
                                  (format "splits AS s%d" %2)
                                  (format "%s JOIN splits AS s%d USING (transaction_id)" %1 %2))
                         "" ids)
           where-clause (str/join " AND " (map #(format "(s%d.person_id = ?)" %) ids))]
-      (concat [(str "t.id IN (SELECT transaction_id FROM " from-clause " WHERE " where-clause ")")] ids))
+      (concat [(str "t.id IN (SELECT transaction_id FROM " from-clause " WHERE " where-clause ")")] ids))))
 
-    [id]
-    ["t.id IN (SELECT transaction_id FROM splits WHERE person_id = ?)", id]))
+(defmethod render-query-param :default [_] [])
 
-(defmethod txn-param->clause :default [_] [])
+
+(defn render-query-params
+  "Renders transaction query parameters into a WHERE vector."
+  [params]
+  (let [params' (s/conform ::q/params params)]
+    (if-not (= params' ::s/invalid)
+      (where-join "AND" (map render-query-param params'))
+      (throw (IllegalArgumentException. (s/explain-str ::q/params params))))))
+
+(s/fdef render-query-params
+  :args (s/cat :params ::q/params)
+  :ret (s/or :empty empty?
+             :not-empty (s/cat :where string?
+                               :params (s/+ any?))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -220,20 +237,28 @@
   ([]
    (get-transactions {}))
 
-  ([query-params]
-   (let [[where & params] (where-join "AND" (map txn-param->clause query-params))
-         query (str "SELECT t.id, t.created_at, t.updated_at, t.date, t.category_id, t.title, t.description, t.tags, json_agg(s) AS splits"
+  ([params]
+   (let [[where & where-params] (render-query-params params)
+         limit (::q/limit params)
+         query (str "SELECT t.*, json_agg(s) AS splits"
                     " FROM transactions AS t LEFT OUTER JOIN splits AS s ON (s.transaction_id = t.id)"
                     (if where (str " WHERE " where))
                     " GROUP BY t.id"
-                    " ORDER BY date, id"
-                    (if-let [limit (:limit query-params)] (str " LIMIT " limit)))]
-     ;(println query ";" params)
+                    " ORDER BY t.date, t.id"
+                    (if limit (str " LIMIT " limit)))]
      (map decode-transaction
-       (jdbc/query @db/*db-con* (concat [query] params))))))
+       (jdbc/query @db/*db-con* (concat [query] where-params))))))
+
+(s/fdef get-transactions
+  :args (s/cat :params (s/? ::q/params))
+  :ret (s/coll-of ::transaction))
 
 (defn get-transaction [id]
-  (first (get-transactions {:id id})))
+  (first (get-transactions {::q/id id})))
+
+(s/fdef get-transaction
+  :args (s/cat :id pos-int?)
+  :ret (s/nilable ::transaction))
 
 (defn insert-transaction!
   "Creates a new transaction. The values should be a map similar to the one
@@ -262,6 +287,14 @@
         (jdbc/insert-multi! con :splits (map #(assoc % ::transaction_id txn_id) splits)))
       txn_id)))
 
+(def new-txn-spec
+  (s/keys :req [::date ::category_id ::title]
+          :opt [::description ::tags ::splits]))
+
+(s/fdef insert-transaction!
+  :args (s/cat :txn new-txn-spec)
+  :ret pos-int?)
+
 (defn update-transaction!
   "Updates an existing transaction. The txn argument is the same as for
   insert-transaction!. All fields are optional, although if tags or splits are
@@ -283,13 +316,32 @@
 
       true)))
 
+(def update-txn-spec
+  (s/keys :opt [::date ::category_id ::title ::description ::tags
+                ::splits]))
+
+(s/fdef update-transaction!
+  :args (s/cat :txn_id ::id
+               :txn update-txn-spec)
+  :ret boolean?)
+
 (defn delete-transaction!
   "Deletes an existing transaction."
   [txn_id]
   (let [[n] (jdbc/delete! @db/*db-con* :transactions ["id = ?", txn_id])]
     (> n 0)))
 
+(s/fdef delete-transaction!
+  :args (s/cat :txn_id ::id)
+  :ret boolean?)
+
 (defn all-tags
   "Returns a list of all known transaction tags."
-  [con]
-  (map :tag (jdbc/query con ["SELECT DISTINCT unnest(tags) AS tag FROM transactions"])))
+  []
+  (->> (jdbc/query @db/*db-con* ["SELECT DISTINCT unnest(tags) AS tag FROM transactions"])
+       (map :tag)
+       (vec)))
+
+(s/fdef all-tags
+  :args (s/cat)
+  :ret (s/coll-of spec/tag))

@@ -11,7 +11,7 @@
   [op clauses]
   (let [force-parens (fn [where]
                        (if-not (and (str/starts-with? (have string? where) "(")
-                                    (str/ends-with? (have string? where) ")"))
+                                    (str/ends-with? where ")"))
                          (str "(" where ")")
                          where))
         op (str " " op " ")
@@ -20,5 +20,5 @@
       [([] :seq)] []
       [([clause] :seq)] clause
       :else (vec (apply concat
-                        [(str/join op (->> clauses (map first) (map force-parens)))]
+                        [(str/join op (map (comp force-parens first) clauses))]
                         (map rest clauses))))))

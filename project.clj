@@ -17,11 +17,11 @@
                  [org.clojure/data.json "0.2.6"]
                  [org.clojure/java.jdbc "0.7.8"]
                  [ring/ring-core "1.6.3"]
-                 [ring/ring-json "0.4.0"]
+                 [ring/ring-spec "0.0.4"]
                  [slingshot "0.12.2"]]
   :plugins [[lein-ring "0.12.4"]]
   :target-path "target/%s"
-  :profiles {:dev {:dependencies [[ring/ring-mock "0.3.2" :exclusions [cheshire]]
+  :profiles {:dev {:dependencies [[ring/ring-mock "0.3.2"]
                                   [ring/ring-devel "1.6.3"]
                                   [circleci/circleci.test "0.4.1"]
                                   [org.clojure/test.check "0.9.0"]]

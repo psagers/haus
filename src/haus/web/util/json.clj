@@ -1,8 +1,11 @@
 (ns haus.web.util.json
   "Tools for working with JSON, both input and output."
-  (:require [clojure.string :as str]
+  (:require [clojure.data.json :as json]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [failjure.core :as f]
             [haus.web.util.http :refer [bad-request]]
+            [ring.util.response :refer [update-header]]
             [slingshot.slingshot :refer [throw+]])
   (:import (com.fasterxml.jackson.core JsonParseException)
            (com.fasterxml.jackson.databind JsonNode ObjectMapper)
@@ -10,11 +13,64 @@
            (com.github.fge.jsonschema.main JsonSchema JsonSchemaFactory)))
 
 
-;
-; Functions for validating against JSON schemas. Schemas are loaded from
-; resource files and used to validate JSON data before it's converted to
-; Clojure data structures.
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Request
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn ^:private json-request? [request]
+  (if-let [ctype (get-in request [:headers "content-type"])]
+    (not (empty? (re-find #"^application/(.+\+)?json" ctype)))))
+
+(defn ^:private read-json
+  [request opts]
+  (if (json-request? request)
+    (if-let [body (:body request)]
+      (with-open [rdr (io/reader body)]
+        (apply json/read rdr opts)))))
+
+(defn ^:private json-body-request
+  [request opts]
+  (if-let [body (read-json request opts)]
+    (assoc request :body body)
+    request))
+
+(defn wrap-json-body
+  "Middleware that parses the body of JSON request maps, and replaces the :body
+  key with the parsed data structure. Requests without a JSON content type are
+  unaffected. Accepts options for clojure.data.json/read."
+  ([handler & opts]
+   (fn
+     ([request]
+      (try
+        (let [request' (json-body-request request opts)]
+          (handler request'))
+        (catch Exception e
+          (bad-request (str "Malformed JSON in request body: " (.getMessage e)))))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Response
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn json-response
+  "Encodes applicable response bodies as JSON."
+  [response]
+  (if (coll? (:body response))
+    (-> response
+        (update-in [:body] json/write-str)
+        (update-header "content-type" #(or % "application/json; charset=utf-8")))
+    response))
+
+(defn wrap-json-response
+  "Middleware that encodes applicable response bodies as JSON."
+  [handler]
+  (fn [request]
+    (json-response (handler request))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; JSON Schema
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn ^:private node->clj
   "Converts a JsonNode to a Clojure data structure."
@@ -60,7 +116,7 @@
   "Validates a request body against a JSON schema. Returns either the decoded
   value or an HTTP response with an error status. Accepts an option map with
   :keywords? and :bigdecimals?, both defaulting to true.
-  
+
   The body can be either an InputStream or a string."
   ([^JsonSchema schema body]
    (conform schema body {}))
@@ -82,12 +138,12 @@
     (throw+ err)))
 
 
-;
-; Functions for interfacting with JDBC
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; JDBC
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ; clj-time monkey-patches jdbc, so the date types are a little unpredictable,
 ; depending on whether clj-time has been loaded.
-;
 
 (defmulti encode-timestamp class)
 
@@ -107,4 +163,5 @@
 
 (defmethod encode-date org.joda.time.DateTime
   [^org.joda.time.DateTime date]
-  (.print (org.joda.time.format.DateTimeFormat/forPattern "yyyy-MM-dd") date))
+  (let [formatter (org.joda.time.format.DateTimeFormat/forPattern "yyyy-MM-dd")]
+    (.print formatter date)))

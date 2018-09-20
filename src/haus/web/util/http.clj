@@ -88,5 +88,5 @@
             ([base part]
              (let [base (str/replace base #"/+$" "")
                    part (str/replace part #"^/+" "")]
-               (str/join "/" (filter (complement empty?) [base, part])))))]
+               (str/join "/" (filter not-empty [base, part])))))]
     (reduce join (have some? :in parts))))

@@ -14,8 +14,8 @@
 (defn ^:private run-with-test-db
   "Sets up an empty test database with migrations applied."
   [f]
-  (let [dbname (str (get @db/*db-spec* :dbname) "_test")
-        test-db-spec (assoc @db/*db-spec* :dbname dbname)]
+  (let [test-db-spec (update @db/*db-spec* :dbname #(str % "_test"))
+        dbname (:dbname test-db-spec)]
     ; First connect to the default database so we can create a fresh test DB.
     (jdbc/execute! @db/*db-spec* [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})
     (jdbc/execute! @db/*db-spec* [(str "CREATE DATABASE " dbname " TEMPLATE template0 LC_COLLATE 'en_US.UTF-8'")] {:transaction? false})
@@ -24,16 +24,15 @@
     (try
       (binding [db/*db-spec* (delay test-db-spec)]
         (db/migrate)
-        (jdbc/with-db-connection [con @db/*db-spec*]
-          (binding [db/*db-con* (delay con)]
-            (f))))
+        (db/with-db-connection
+          (f)))
       (finally
         (jdbc/execute! @db/*db-spec* [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})))))
 
 (defn with-db
   "This is installed at both the :once level and circleci's :global-fixtures.
   This supports both fast lein tests and repl interaction, but we have to be
-  careful not to reenter."
+  careful not to reenter run-with-test-db."
   [f]
   (if (map? @db/*db-con*)
     (run-with-test-db f)
@@ -43,10 +42,9 @@
   "Executes a test in a single transaction, which will be rolled back at the
   end."
   [f]
-  (jdbc/with-db-transaction [t-con @db/*db-con*]
-    (jdbc/db-set-rollback-only! t-con)
-    (binding [db/*db-con* (delay t-con)]
-      (f))))
+  (db/with-db-transaction
+    (jdbc/db-set-rollback-only! @db/*db-con*)
+    (f)))
 
 (defmacro use-fixtures
   "Every test namespace should call this to install our database fixtures. Pass

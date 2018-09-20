@@ -7,6 +7,10 @@
             [haus.db :as db]))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Spec
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (s/def ::id spec/pos-int-32)
 (s/def ::name (s/with-gen (s/and string? #(<= 1 (count %) 50))
                           #(gen/string-alphanumeric)))
@@ -14,9 +18,23 @@
 ; A single person from the database.
 (s/def ::person (s/keys :req [::id ::name]))
 
+; Parameters for inserting a new person.
+(s/def ::insert-params (spec/exclusive-keys :req [::name]))
+
+; Parameters for updating an existing person.
+(s/def ::update-params (spec/exclusive-keys :req [::name]))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Util
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def qualify-keys (partial util/qualify-keys (str *ns*)))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; API
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn get-people []
   (let [rows (jdbc/query @db/*db-con* ["SELECT * FROM people"])]
@@ -41,7 +59,7 @@
     id))
 
 (s/fdef insert-person!
-  :args (s/cat :person (s/keys :req [::name]))
+  :args (s/cat :person ::insert-params)
   :ret ::id)
 
 
@@ -51,7 +69,7 @@
 
 (s/fdef update-person!
   :args (s/cat :id ::id
-               :person (s/keys :opt [::name]))
+               :person ::update-params)
   :ret boolean?)
 
 
@@ -59,6 +77,6 @@
   (let [[n] (jdbc/delete! @db/*db-con* :people ["id = ?", id])]
     (> n 0)))
 
-(s/fdef update-person!
+(s/fdef delete-person!
   :args (s/cat :id ::id)
   :ret boolean?)

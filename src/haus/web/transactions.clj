@@ -4,7 +4,7 @@
             [compojure.core :refer [ANY defroutes]]
             [failjure.core :as f]
             [haus.core.util :refer [re-pred until-failed]]
-            [haus.db :as db]
+            [haus.db.transactions :as db]
             [haus.web.util.generic :as generic :refer [wrap-id-param]]
             [haus.web.util.http :as http]
             [haus.web.util.json :as json]
@@ -13,9 +13,9 @@
             [taoensso.truss :refer [have]]))
 
 
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Request processing
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn ^:private conform-body
   "Validates a request body and additionally ensures that splits (if given) sum
@@ -119,9 +119,9 @@
     (transduce xform conj {} params)))
 
 
-;
-; Response encoding
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; DB -> response
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn ^:private encode-transaction
   [txn]
@@ -131,9 +131,9 @@
       (update :date json/encode-date)))
 
 
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; For generics
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def db-fns
   {:insert-fn db/insert-transaction!
@@ -142,9 +142,9 @@
    :delete-fn db/delete-transaction!})
 
 
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; /transactions
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (http/defresource transactions)
 
@@ -163,9 +163,9 @@
     (created (http/url-join (request-url req) (have int? txn_id)))))
 
 
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; /transactions/:id
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (http/defresource transaction)
 
@@ -187,9 +187,9 @@
   (generic/delete-obj! req db-fns))
 
 
-;
-; Handler
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Routes
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defroutes routes
   (ANY "/" req transactions)

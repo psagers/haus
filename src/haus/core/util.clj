@@ -69,8 +69,12 @@
    (keywordize-keys-safe m nil))
 
   ([m key-ns]
-   (let [f (fn [[k v]] (if (string? k) [(find-keyword key-ns k) v] [k v]))]
-     (walk/postwalk (fn [x] (if (map? x) (into {} (map f x)) x)) m))))
+   (letfn [(f [[k v]] (if-let [k' (if (string? k) (find-keyword key-ns k) k)]
+                        [k' v]
+                        [k v]))]
+     (walk/postwalk
+       #(if (map? %) (into {} (map f %)) %)
+       m))))
 
 
 (defn submap?

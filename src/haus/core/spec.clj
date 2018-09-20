@@ -1,7 +1,9 @@
 (ns haus.core.spec
   "Wrappers and utilities for spec."
   (:require [clojure.spec.alpha :as s]
-            [clojure.spec.gen.alpha :as gen]
+            [clojure.spec.gen.alpha :as sgen]
+            [clojure.test.check.generators :as gen]
+            [clojure.string :as str]
             [haus.core.util :as util :refer [unqualify]])
   (:import (org.joda.time DateTime)))
 
@@ -26,6 +28,14 @@
               (util/digits? value) (Integer/parseInt value)
               :else ::s/invalid))]
     (s/conformer conform-value identity)))
+
+(def tag
+  "A spec that matches and generates valid tags."
+  (s/with-gen (simple-conformer util/tag? str/lower-case)
+              (fn []
+                (gen/let [head gen/char-alpha
+                          tail (gen/vector (gen/elements "abcdefghijklmnopqrstuvwxyz0123456789_-") 0 19)]
+                  (apply str head tail)))))
 
 (def sql-timestamp
   "A spec that matches Inst and generates java.sql.Timestamp."
@@ -53,7 +63,7 @@
                                (gen/choose 1420099200 1577865600)))))
 
 (def sql-date-str
-  "A spec that matches SQL date strings and generates java.sql.Date."
+  "A spec that matches and generates SQL date strings."
   (s/with-gen util/sql-date-str?
               (fn [] (gen/fmap #(str (java.sql.Date. (* % 1000)))
                                (gen/choose 1420099200 1577865600)))))
@@ -67,9 +77,14 @@
         conform-value (fn [value]
                         (cond
                           (pred value) (keyword key-ns value)
+
+                          (and (simple-keyword? value)
+                               (pred (name value)))  (keyword key-ns (name value))
+
                           (and (qualified-keyword? value)
                                (= (namespace value) key-ns)
-                               (pred (name value))) value
+                               (pred (name value)))  value
+
                           :else ::s/invalid))]
     (s/conformer conform-value identity)))
 

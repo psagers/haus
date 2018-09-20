@@ -1,60 +1,64 @@
 (ns haus.web.people
   (:require [compojure.core :refer [ANY defroutes]]
-            [haus.db :as db]
+            [haus.db.people :as db]
             [haus.web.util.generic :as generic :refer [wrap-id-param]]
             [haus.web.util.http :refer [defresource]]
-            [haus.web.util.json :refer [load-schema]]
             [ring.util.response :refer [response]]))
 
-(def db-fns
-  {:insert-fn db/insert-person!
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Generic options
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def generic-opts
+  {:key-ns "haus.db.people"
    :get-fn db/get-person
+   :insert-fn db/insert-person!
    :update-fn db/update-person!
    :delete-fn db/delete-person!})
 
+(defn opts-with-spec
+  [spec]
+  (assoc generic-opts :spec spec))
 
-;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; /people
-;
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defresource people)
 
 (defmethod people :get
-  [{con :db-con}]
-  (response (db/get-people con)))
-
-(def post-people-schema (delay (load-schema "people-post.json")))
+  [req]
+  (response (db/get-people)))
 
 (defmethod people :post
   [req]
-  (generic/new-obj! req db-fns @post-people-schema))
+  (generic/new-obj! req (opts-with-spec ::db/insert-params)))
 
 
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; /people/:id
-;
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defresource person)
 
 (defmethod person :get
   [req]
-  (generic/get-obj req db-fns))
+  (generic/get-obj req generic-opts))
 
-(def put-person-schema (delay (load-schema "person-put.json")))
-
-(defmethod person :put
+(defmethod person :post
   [req]
-  (generic/update-obj! req db-fns @put-person-schema))
+  (generic/update-obj! req (opts-with-spec ::db/update-params)))
 
 (defmethod person :delete
   [req]
-  (generic/delete-obj! req db-fns))
+  (generic/delete-obj! req generic-opts))
 
-;
-;
-;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Routes
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defroutes routes
   (ANY "/" req people)

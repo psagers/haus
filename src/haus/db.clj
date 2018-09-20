@@ -6,7 +6,7 @@
 
 ; Static database parameters. These can't be overridden by external
 ; configuration.
-(def db-params
+(def ^:private db-params
   {:dbtype "pgsql"
    :classname "com.impossibl.postgres.jdbc.PGDriver"})
 
@@ -21,6 +21,14 @@
 ; other context that would like a persistent connection.
 (def ^:dynamic *db-con* *db-spec*)
 
+
+(defmacro with-db-connection
+  "Executes forms inside a SQL connection. *db-con* will be re-bound inside
+  this form."
+  [& body]
+  `(jdbc/with-db-connection [con# @db/*db-spec*]
+     (binding [*db-con* (delay con#)]
+       ~@body)))
 
 (defmacro with-db-transaction
   "Executes forms inside a SQL transaction. *db-con* will be re-bound inside
