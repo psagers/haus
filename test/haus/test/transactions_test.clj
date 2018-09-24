@@ -16,19 +16,19 @@
 (defn with-people
   "A fixture that inserts some people to work with."
   [f]
-  (jdbc/insert-multi! @db/*db-con* :people [{:id 1, :name "Alice"}
-                                            {:id 2, :name "Bob"}
-                                            {:id 3, :name "Carol"}
-                                            {:id 4, :name "David"}])
+  (jdbc/insert-multi! util/*db-conn* :people [{:id 1, :name "Alice"}
+                                              {:id 2, :name "Bob"}
+                                              {:id 3, :name "Carol"}
+                                              {:id 4, :name "David"}])
   (f))
 
 (defn with-categories
   "A fixture that inserts some categories to work with."
   [f]
-  (jdbc/insert-multi! @db/*db-con* :categories [{:id 1, :name "Rent"}
-                                                {:id 2, :name "Utilities"}
-                                                {:id 3, :name "Food"}
-                                                {:id 4, :name "Payments"}])
+  (jdbc/insert-multi! util/*db-conn* :categories [{:id 1, :name "Rent"}
+                                                  {:id 2, :name "Utilities"}
+                                                  {:id 3, :name "Food"}
+                                                  {:id 4, :name "Payments"}])
   (f))
 
 
@@ -59,44 +59,48 @@
 
 (deftest transaction-operations
   ; Insert, retrieve, update, and delete a bunch of transactions.
-  (doseq [params (gen/sample (transaction-gen t/new-txn-spec) 100)]
-    (let [txn_id (t/insert-transaction! params)]
-      (t/get-transaction txn_id)
-      (let [params (gen/generate (transaction-gen t/update-txn-spec))]
-        (t/update-transaction! txn_id params))
-      (t/delete-transaction! txn_id)))
+  (let [conn util/*db-conn*]
+    (doseq [params (gen/sample (transaction-gen ::t/insert-params) 100)]
+      (let [txn_id (t/insert-transaction! conn params)]
+        (t/get-transaction conn txn_id)
+        (let [params (gen/generate (transaction-gen ::t/update-params))]
+          (t/update-transaction! conn txn_id params))
+        (t/delete-transaction! conn txn_id)))
 
-  ; Every transaction was deleted, so the totals table should be all zeros.
-  (let [totals (tot/get-totals)
-        expected (tot/compute-totals)]
-    (is (= expected totals))
-    (is (every? (comp zero? ::tot/amount) totals))))
+    ; Every transaction was deleted, so the totals table should be all zeros.
+    (let [totals (tot/get-totals conn)
+          expected (tot/compute-totals conn)]
+      (is (= expected totals))
+      (is (every? (comp zero? ::tot/amount) totals)))))
 
 
 (deftest totals
-  ; Insert 100 transactions
-  (doseq [params (gen/sample (transaction-gen t/new-txn-spec) 100)]
-    (t/insert-transaction! params))
+  (let [conn util/*db-conn*]
+    ; Insert 100 transactions
+    (doseq [params (gen/sample (transaction-gen ::t/insert-params) 100)]
+      (t/insert-transaction! conn params))
 
-  (let [txn_ids (vec (map :id (jdbc/query @db/*db-con* ["SELECT id FROM transactions"])))]
-    ; Modify 30 random transactions.
-    (doseq [txn_id (take 30 (shuffle txn_ids))]
-      (let [params (gen/generate (transaction-gen t/update-txn-spec))]
-        (t/update-transaction! txn_id params)))
+    (let [txn_ids (vec (map :id (jdbc/query conn ["SELECT id FROM transactions"])))]
+      ; Modify 30 random transactions.
+      (doseq [txn_id (take 30 (shuffle txn_ids))]
+        (let [params (gen/generate (transaction-gen ::t/update-params))]
+          (t/update-transaction! conn txn_id params)))
 
-    ; Delete 30 random transactions.
-    (doseq [txn_id (take 30 (shuffle txn_ids))]
-      (t/delete-transaction! txn_id)))
+      ; Delete 30 random transactions.
+      (doseq [txn_id (take 30 (shuffle txn_ids))]
+        (t/delete-transaction! conn txn_id)))
 
-  ; Make sure the totals table is accurate.
-  (let [totals (tot/get-totals)
-        expected (tot/compute-totals)]
-    (is (= expected totals))))
+    ; Make sure the totals table is accurate.
+    (let [totals (tot/get-totals conn)
+          expected (tot/compute-totals conn)]
+      (is (= expected totals)))))
 
 
 (deftest query
-  (doseq [params (gen/sample (transaction-gen t/new-txn-spec) 100)]
-    (t/insert-transaction! params))
+  (let [conn util/*db-conn*]
+    (doseq [params (gen/sample (transaction-gen ::t/insert-params) 100)]
+      (t/insert-transaction! conn params))
 
-  (doseq [result (stest/check `t/get-transactions {::stc/opts {:num-tests 100}})]
-    (clojure.test.check.clojure-test/assert-check (::stc/ret result))))
+    (doseq [result (stest/check `t/get-transactions {::stc/opts {:num-tests 100}
+                                                     :gen {::db/conn #(gen/return conn)}})]
+      (clojure.test.check.clojure-test/assert-check (::stc/ret result)))))

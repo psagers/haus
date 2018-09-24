@@ -1,21 +1,21 @@
 (ns haus.core.config
   (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [haus.core.util :refer [deep-merge]]
+            [com.stuartsierra.component :as component]
+            [taoensso.truss :refer [have]]))
+
 
 ; Default configuration, pending merging from the environment.
-(def default-config
-  {:db {:dbname "haus"
-        :user "postgres"}
+(def ^:private default-config
+  {:db {:host "localhost"
+        :port 5432
+        :dbname "haus"
+        :user "postgres"
+        :password nil}
    :logging {:level :info}})
 
-(defn deep-merge
-  "Recursively merges maps."
-  [& args]
-  (if (every? map? args)
-    (apply merge-with deep-merge args)
-    (last args)))
-
-(defn load-user-config
+(defn ^:private load-user-config
   "Loads the user config from the EDN file. The path is taken from the
   HAUS_CONFIG environment variable."
   []
@@ -23,18 +23,39 @@
     (with-open [rdr (java.io.PushbackReader. (io/reader path))]
       (edn/read rdr))))
 
-(defn load-config
+(defn ^:private load-config
   "Returns the final, merged config."
-  []
-  (if-let [user-config (load-user-config)]
-    (deep-merge default-config user-config)
-    default-config))
+  [base-config override-config]
+  (let [user-config (or (load-user-config) {})]
+    (deep-merge default-config base-config user-config override-config)))
 
-; Our final configuration (lazy).
-(def config (delay (load-config)))
 
-;
-; Convenience accessors
-;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Component
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn log-level [] (get-in @config [:logging :level]))
+; Configuration is defined in four layers: default < base < user < override.
+; Defaults are built in; base is provided by the system definition; user comes
+; from the environment; and overrides allow special systems (such as the test
+; system) to have the last word.
+(defrecord Config [base override config]
+  component/Lifecycle
+
+  (start [this]
+    (let [config (load-config base override)]
+      (assoc this :config config)))
+
+  (stop [this]
+    this))
+
+
+(defn new-config
+  ([]
+   (new-config {} {}))
+
+  ([base]
+   (new-config base {}))
+
+  ([base override]
+   (map->Config {:base (have map? base)
+                 :override (have map? override)})))

@@ -3,8 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [haus.core.spec :as spec]
-            [haus.core.util :as util]
-            [haus.db :as db]))
+            [haus.core.util :as util]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -26,57 +25,55 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Util
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(def qualify-keys (partial util/qualify-keys (str *ns*)))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; API
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn get-people []
-  (let [rows (jdbc/query @db/*db-con* ["SELECT * FROM people"])]
-    (map qualify-keys rows)))
+(defn get-people [conn]
+  (jdbc/query conn ["SELECT * FROM people"]
+              {:qualifier (namespace ::_)}))
 
 (s/fdef get-people
-  :args (s/cat)
+  :args (s/cat :conn :haus.db/conn)
   :ret (s/coll-of ::person))
 
 
-(defn get-person [id]
-  (let [rows (jdbc/query @db/*db-con* ["SELECT * FROM people WHERE id = ?", id])]
-    (first (map qualify-keys rows))))
+(defn get-person [conn id]
+  (jdbc/query conn ["SELECT * FROM people WHERE id = ?", id]
+              {:qualifier (namespace ::_)
+               :result-set-fn first}))
 
 (s/fdef get-person
-  :args (s/cat :id ::id)
+  :args (s/cat :conn :haus.db/conn
+               :id ::id)
   :ret (s/nilable ::person))
 
 
-(defn insert-person! [person]
-  (let [[{id :id}] (jdbc/insert! @db/*db-con* :people person)]
+(defn insert-person! [conn person]
+  (let [[{id :id}] (jdbc/insert! conn :people person)]
     id))
 
 (s/fdef insert-person!
-  :args (s/cat :person ::insert-params)
+  :args (s/cat :conn :haus.db/conn
+               :person ::insert-params)
   :ret ::id)
 
 
-(defn update-person! [id person]
-  (let [[n] (jdbc/update! @db/*db-con* :people person ["id = ?", id])]
+(defn update-person! [conn id person]
+  (let [[n] (jdbc/update! conn :people person ["id = ?", id])]
     (> n 0)))
 
 (s/fdef update-person!
-  :args (s/cat :id ::id
+  :args (s/cat :conn :haus.db/conn
+               :id ::id
                :person ::update-params)
   :ret boolean?)
 
 
-(defn delete-person! [id]
-  (let [[n] (jdbc/delete! @db/*db-con* :people ["id = ?", id])]
+(defn delete-person! [conn id]
+  (let [[n] (jdbc/delete! conn :people ["id = ?", id])]
     (> n 0)))
 
 (s/fdef delete-person!
-  :args (s/cat :id ::id)
+  :args (s/cat :conn :haus.db/conn
+               :id ::id)
   :ret boolean?)

@@ -14,15 +14,7 @@
 (s/def ::category_id spec/pos-int-32)
 (s/def ::amount (s/and decimal? (complement zero?) #(< -100000000M % 100000000M)))
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Row -> Clojure
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn ^:private decode-total
-  "Decodes a row from the totals table."
-  [row]
-  (util/qualify-keys (namespace ::a) row))
+(s/def ::total (s/keys :req [::person_id ::category_id ::amount]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -31,13 +23,13 @@
 
 (defn get-totals
   "Returns all rows from the totals table."
-  []
-  (map decode-total
-    (jdbc/query @db/*db-con* ["SELECT * FROM totals ORDER BY person_id, category_id"])))
+  [conn]
+  (jdbc/query conn ["SELECT * FROM totals ORDER BY person_id, category_id"]
+              {:qualifier (namespace ::_)}))
 
 (defn compute-totals
   "Returns freshly computed totals. If everything's working, this should always
   produce the same thing as get-totals."
-  []
-  (map decode-total
-    (jdbc/query @db/*db-con* ["SELECT * FROM dynamic_totals ORDER BY person_id, category_id"])))
+  [conn]
+  (jdbc/query conn ["SELECT * FROM dynamic_totals ORDER BY person_id, category_id"]
+              {:qualifier (namespace ::_)}))

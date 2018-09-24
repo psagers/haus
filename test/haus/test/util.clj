@@ -2,56 +2,69 @@
   (:require [clojure.data.json :as json]
             [clojure.java.jdbc :as jdbc]
             [clojure.test :refer [is]]
-            [haus.db :as db]
+            [com.stuartsierra.component :as component]
             [ring.util.response :refer [find-header]]
-            [taoensso.timbre :as timbre]))
+            [haus.db :as db]
+            [haus.main :as main]))
 
-(defn with-logging
-  [f]
-  (timbre/with-level :warn
-    (f)))
 
-(defn ^:private run-with-test-db
-  "Sets up an empty test database with migrations applied."
-  [f]
-  (let [test-db-spec (update @db/*db-spec* :dbname #(str % "_test"))
-        dbname (:dbname test-db-spec)]
-    ; First connect to the default database so we can create a fresh test DB.
-    (jdbc/execute! @db/*db-spec* [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})
-    (jdbc/execute! @db/*db-spec* [(str "CREATE DATABASE " dbname " TEMPLATE template0 LC_COLLATE 'en_US.UTF-8'")] {:transaction? false})
+; The test component system (when tests are running).
+(def ^:dynamic *system* nil)
 
-    ; Switch to the test DB.
-    (try
-      (binding [db/*db-spec* (delay test-db-spec)]
-        (db/migrate)
-        (db/with-db-connection
-          (f)))
-      (finally
-        (jdbc/execute! @db/*db-spec* [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})))))
+; Tests must use this for all database access. Each test will be run in a
+; transaction that gets rolled back at the end.
+(def ^:dynamic *db-conn* nil)
 
-(defn with-db
+
+(defn ^:private test-system []
+  (main/system {} {:env :test
+                   :db {:dbname "haus_test"}
+                   :logging {:level :warn}}))
+
+
+(defn ^:private run-with-test-system [f]
+  ; First connect to the default database so we can create a fresh test DB.
+  (let [db-sys (component/start (db/db-system))
+        conn (get-in db-sys [:db :conn])]
+    (jdbc/execute! conn [(str "DROP DATABASE IF EXISTS haus_test")] {:transaction? false})
+    (jdbc/execute! conn [(str "CREATE DATABASE haus_test TEMPLATE template0 LC_COLLATE 'en_US.UTF-8'")] {:transaction? false})
+
+    ; Now spin up a test system and capture the database connection.
+    (let [test-system (component/start (test-system))]
+      (binding [*system* test-system
+                *db-conn* (get-in test-system [:db :conn])]
+        (try
+          (db/migrate (db/migratus-config *db-conn*))
+          (f)
+          (finally
+            (component/stop *system*)
+            (jdbc/execute! conn [(str "DROP DATABASE IF EXISTS haus_test")] {:transaction? false})
+            (component/stop db-sys)))))))
+
+(defn with-test-system
   "This is installed at both the :once level and circleci's :global-fixtures.
   This supports both fast lein tests and repl interaction, but we have to be
-  careful not to reenter run-with-test-db."
+  careful not to reenter run-with-test-system."
   [f]
-  (if (map? @db/*db-con*)
-    (run-with-test-db f)
+  (if (nil? *system*)
+    (run-with-test-system f)
     (f)))
 
 (defn with-transaction
   "Executes a test in a single transaction, which will be rolled back at the
   end."
   [f]
-  (db/with-db-transaction
-    (jdbc/db-set-rollback-only! @db/*db-con*)
-    (f)))
+  (jdbc/with-db-transaction [conn *db-conn*]
+    (jdbc/db-set-rollback-only! conn)
+    (binding [*db-conn* conn]
+      (f))))
 
 (defmacro use-fixtures
   "Every test namespace should call this to install our database fixtures. Pass
   additional :each fixtures as arguments."
   [& each]
   `(do
-     (clojure.test/use-fixtures :once with-logging with-db)
+     (clojure.test/use-fixtures :once with-test-system)
      (clojure.test/use-fixtures :each with-transaction ~@each)))
 
 (defn response-content-type

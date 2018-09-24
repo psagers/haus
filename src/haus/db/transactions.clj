@@ -62,6 +62,12 @@
 (s/def ::transaction (s/keys :req [::id ::created_at ::updated_at ::date ::category_id
                                    ::title ::description ::tags ::splits]))
 
+(s/def ::insert-params (s/keys :req [::date ::category_id ::title]
+                               :opt [::description ::tags ::splits]))
+
+(s/def ::update-params (s/keys :opt [::date ::category_id ::title ::description ::tags
+                                     ::splits]))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Row -> Clojure
@@ -74,14 +80,14 @@
             (case key
               (::amount) (-> value (bigdec) (.setScale 2))
               value))]
-    (vec (filter some? (json/read-str splits
+    (vec (filter some? (json/read-str (have string? splits)
                                       :key-fn (partial keyword (namespace ::_))
                                       :value-fn decode-value)))))
 
 (defn ^:private decode-transaction
   "Decodes a transaction row."
   [row]
-  (-> (util/qualify-keys (namespace ::_) row)
+  (-> row
       (update ::tags vec)
       (update ::splits decode-splits)))
 
@@ -207,7 +213,7 @@
                                  (format "%s JOIN splits AS s%d USING (transaction_id)" %1 %2))
                         "" ids)
           where-clause (str/join " AND " (map #(format "(s%d.person_id = ?)" %) ids))]
-      (concat [(str "t.id IN (SELECT transaction_id FROM " from-clause " WHERE " where-clause ")")] ids))))
+      (cons (str "t.id IN (SELECT transaction_id FROM " from-clause " WHERE " where-clause ")") ids))))
 
 (defmethod render-query-param :default [_] [])
 
@@ -234,10 +240,10 @@
 (defn get-transactions
   "Returns a sequence of transactions. The optional argument is a map of query
   parameters."
-  ([]
-   (get-transactions {}))
+  ([conn]
+   (get-transactions conn {}))
 
-  ([params]
+  ([conn params]
    (let [[where & where-params] (render-query-params params)
          limit (::q/limit params)
          query (str "SELECT t.*, json_agg(s) AS splits"
@@ -246,18 +252,21 @@
                     " GROUP BY t.id"
                     " ORDER BY t.date, t.id"
                     (if limit (str " LIMIT " limit)))]
-     (map decode-transaction
-       (jdbc/query @db/*db-con* (concat [query] where-params))))))
+     (jdbc/query conn (cons query where-params)
+                 {:qualifier (namespace ::_)
+                  :row-fn decode-transaction}))))
 
 (s/fdef get-transactions
-  :args (s/cat :params (s/? ::q/params))
+  :args (s/cat :conn :haus.db/conn
+               :params (s/? ::q/params))
   :ret (s/coll-of ::transaction))
 
-(defn get-transaction [id]
-  (first (get-transactions {::q/id id})))
+(defn get-transaction [conn id]
+  (first (get-transactions conn {::q/id id})))
 
 (s/fdef get-transaction
-  :args (s/cat :id pos-int?)
+  :args (s/cat :conn :haus.db/conn
+               :id pos-int?)
   :ret (s/nilable ::transaction))
 
 (defn insert-transaction!
@@ -277,71 +286,67 @@
     ::amount - BigDecimal (or something that PostgreSQL will automatically cast).
 
   Returns the id of the new transaction."
-  [txn]
-  (jdbc/with-db-transaction [con @db/*db-con*]
+  [conn txn]
+  (jdbc/with-db-transaction [conn conn]
     (let [row (encode-transaction txn)
           splits (encode-splits (get txn ::splits []))
-          [{txn_id :id}] (jdbc/insert! con :transactions row)]
+          [{txn_id :id}] (jdbc/insert! conn :transactions row)]
       (when-not (empty? splits)
         (validate-splits splits)
-        (jdbc/insert-multi! con :splits (map #(assoc % ::transaction_id txn_id) splits)))
+        (jdbc/insert-multi! conn :splits (map #(assoc % ::transaction_id txn_id) splits)))
       txn_id)))
 
-(def new-txn-spec
-  (s/keys :req [::date ::category_id ::title]
-          :opt [::description ::tags ::splits]))
-
 (s/fdef insert-transaction!
-  :args (s/cat :txn new-txn-spec)
+  :args (s/cat :conn :haus.db/conn
+               :txn ::insert-params)
   :ret pos-int?)
 
 (defn update-transaction!
   "Updates an existing transaction. The txn argument is the same as for
   insert-transaction!. All fields are optional, although if tags or splits are
   given, they will replace any existing values."
-  [txn_id txn]
-  (jdbc/with-db-transaction [con @db/*db-con*]
+  [conn txn_id txn]
+  (jdbc/with-db-transaction [conn conn]
     (let [row (encode-transaction txn)
           splits (encode-splits (get txn ::splits []))]
 
       ; Apply transaction updates, if any.
       (when-not (empty? row)
-        (jdbc/update! con :transactions row ["id = ?", txn_id]))
+        (jdbc/update! conn :transactions row ["id = ?", txn_id]))
 
       ; Apply split updates, if any.
       (when-not (empty? splits)
         (validate-splits splits)
-        (jdbc/delete! con :splits ["transaction_id = ?", txn_id])
-        (jdbc/insert-multi! con :splits (map #(assoc % ::transaction_id txn_id) splits)))
+        (jdbc/delete! conn :splits ["transaction_id = ?", txn_id])
+        (jdbc/insert-multi! conn :splits (map #(assoc % ::transaction_id txn_id) splits)))
 
       true)))
 
-(def update-txn-spec
-  (s/keys :opt [::date ::category_id ::title ::description ::tags
-                ::splits]))
-
 (s/fdef update-transaction!
-  :args (s/cat :txn_id ::id
-               :txn update-txn-spec)
+  :args (s/cat :conn :haus.db/conn
+               :txn_id ::id
+               :txn ::update-params)
   :ret boolean?)
 
 (defn delete-transaction!
   "Deletes an existing transaction."
-  [txn_id]
-  (let [[n] (jdbc/delete! @db/*db-con* :transactions ["id = ?", txn_id])]
+  [conn txn_id]
+  (let [[n] (jdbc/delete! conn :transactions ["id = ?", txn_id])]
     (> n 0)))
 
 (s/fdef delete-transaction!
-  :args (s/cat :txn_id ::id)
+  :args (s/cat :conn :haus.db/conn
+               :txn_id ::id)
   :ret boolean?)
 
 (defn all-tags
   "Returns a list of all known transaction tags."
-  []
-  (->> (jdbc/query @db/*db-con* ["SELECT DISTINCT unnest(tags) AS tag FROM transactions"])
-       (map :tag)
-       (vec)))
+  [conn]
+  (jdbc/query conn ["SELECT DISTINCT unnest(tags) AS tag FROM transactions ORDER BY tag"]
+              {:raw? true
+               :row-fn :tag
+               :result-set-fn vec}))
 
 (s/fdef all-tags
-  :args (s/cat)
+  :args (s/cat :conn :haus.db/conn)
   :ret (s/coll-of spec/tag))

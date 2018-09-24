@@ -1,3 +1,2 @@
 {:global-fixture (fn [f]
-                   (taoensso.timbre/set-level! :warn)
-                   (haus.test.util/with-db f))}
+                   (haus.test.util/with-test-system f))}

@@ -77,6 +77,13 @@
        m))))
 
 
+(defn deep-merge
+  "Recursively merges maps."
+  [& args]
+  (if (every? map? args)
+    (apply merge-with deep-merge args)
+    (last args)))
+
 (defn submap?
   [m1 m2]
   (every? (fn [[k v]] (= (get m2 k) v)) m1))

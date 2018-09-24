@@ -1,70 +1,88 @@
 (ns haus.db
-  (:require [haus.core.config :as config]
-            [migratus.core :as migratus]
-            [taoensso.timbre :as timbre]))
+  (:require [clojure.spec.alpha :as s]
+            [haus.core.config :as config]
+            [haus.core.log :as log]
+            [haus.core.util :refer [deep-merge to-int]]
+            [com.stuartsierra.component :as component]
+            [migratus.core :as migratus])
+  (:import (com.mchange.v2.c3p0 ComboPooledDataSource)))
 
 
-; Static database parameters. These can't be overridden by external
-; configuration.
-(def ^:private db-params
-  {:dbtype "pgsql"
-   :classname "com.impossibl.postgres.jdbc.PGDriver"})
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Specs
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; By default, our database spec will be loaded from the config. The tests will
-; override it.
-(def ^:dynamic *db-spec*
-  (delay (config/deep-merge (get @config/config :db) db-params)))
+(s/def ::datasource (partial instance? javax.sql.DataSource))
+(s/def ::connection (partial instance? java.sql.Connection))
 
-; The current database connection (requires dereference). Initially, this just
-; points to the spec, which is suitable for migration operations and REPL
-; interaction. This can be re-bound within requests, transactions, and any
-; other context that would like a persistent connection.
-(def ^:dynamic *db-con* *db-spec*)
+; Something that clojure.java.jdbc will accept for database operations.
+(s/def ::conn (s/or :connection (s/keys :req-un [::connection])
+                    :datasource (s/keys :req-un [::datasource])))
 
 
-(defmacro with-db-connection
-  "Executes forms inside a SQL connection. *db-con* will be re-bound inside
-  this form."
-  [& body]
-  `(jdbc/with-db-connection [con# @db/*db-spec*]
-     (binding [*db-con* (delay con#)]
-       ~@body)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Component
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmacro with-db-transaction
-  "Executes forms inside a SQL transaction. *db-con* will be re-bound inside
-  this form."
-  [& body]
-  `(jdbc/with-db-transaction [con# @db/*db-con*]
-     (binding [*db-con* (delay con#)]
-       ~@body)))
+(defrecord Database [config conn]
+  component/Lifecycle
+
+  (start [this]
+    (let [conf (get-in config [:config :db])
+          {:keys [host port dbname user password]} conf
+          url (format "jdbc:pgsql://%s:%d/%s" host port dbname)
+          pool (doto (ComboPooledDataSource.)
+                 (.setDriverClass "com.impossibl.postgres.jdbc.PGDriver")
+                 (.setJdbcUrl url)
+                 (.setUser user)
+                 (.setPassword password))]
+      (assoc this :conn {:datasource pool})))
+
+  (stop [this]
+    (when-let [pool (get conn :datasource)]
+      (.close pool))
+    (assoc this :conn nil)))
+
+
+(defn new-database []
+  (map->Database {}))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Migrations
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn migratus-config []
+; Just enough to run database operations.
+(defn db-system []
+  (component/system-map
+    :config (config/new-config {:logging {:level :warn}})
+    :log (component/using (log/new-logging) [:config])
+    :db (component/using (new-database) [:config])))
+
+
+(defn migratus-config [db-conn]
   {:store :database
    :migration-dir "migrations"
-   :db @*db-spec*})
+   :db db-conn})
 
-(defn migrate []
-  (migratus/migrate (migratus-config)))
+(defn migrate [config]
+  (migratus/migrate config))
 
-(defn rollback []
-  (migratus/rollback (migratus-config)))
+(defn rollback [config]
+  (migratus/rollback config))
 
-(defn up [& ids]
-  (apply migratus/up (migratus-config) ids))
+(defn up [config ids]
+  (apply migratus/up ids))
 
-(defn down [& ids]
-  (apply migratus/down (migratus-config) ids))
+(defn down [config ids]
+  (apply migratus/down config ids))
 
-(defn reset []
-  (migratus/reset (migratus-config)))
+(defn reset [config]
+  (migratus/reset config))
 
-(defn pending-list []
-  (migratus/pending-list (migratus-config)))
+(defn pending-list [config]
+  (migratus/pending-list config))
+
 
 (defn -main
   "Entry point for a leiningen alias."
@@ -77,13 +95,15 @@
   down id ...: Unapply one or more migrations by numeric identifier.
   reset: Unapply and reapply all migrations.
   pending-list: List unapplied migrations."))
+
   ([action & args]
-   (timbre/with-level (config/log-level)
+   (let [sys (component/start (db-system))
+         config (migratus-config (get-in sys [:db :conn]))]
      (case action
-       ("migrate") (migrate)
-       ("rollback") (rollback)
-       ("up") (apply up (map #(Integer/parseInt %) args))
-       ("down") (apply down (map #(Integer/parseInt %) args))
-       ("reset") (reset)
-       ("pending-list") (println (pending-list))
+       ("migrate") (migrate config)
+       ("rollback") (rollback config)
+       ("up") (up config (map to-int args))
+       ("down") (down config (map to-int args))
+       ("reset") (reset config)
+       ("pending-list") (println (pending-list config))
        (println (str "Unknown db action: " action))))))

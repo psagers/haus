@@ -14,12 +14,13 @@
 
 
 (deftest people
-  (doseq [params (gen/sample (s/gen params-spec) 100)]
-    (let [id (people/insert-person! params)]
-      (is (every? #(submap? params %) (people/get-people)))
-      (is (submap? params (people/get-person id)))
-      (let [params (gen/generate (s/gen params-spec))]
-        (people/update-person! id params)
-        (is (submap? params (people/get-person id))))
-      (is (people/delete-person! id))
-      (is (nil? (people/get-person id))))))
+  (let [conn util/*db-conn*]
+    (doseq [params (gen/sample (s/gen params-spec) 100)]
+      (let [id (people/insert-person! conn params)]
+        (is (every? #(submap? params %) (people/get-people conn)))
+        (is (submap? params (people/get-person conn id)))
+        (let [params (gen/generate (s/gen params-spec))]
+          (people/update-person! conn id params)
+          (is (submap? params (people/get-person conn id))))
+        (is (people/delete-person! conn id))
+        (is (nil? (people/get-person conn id)))))))

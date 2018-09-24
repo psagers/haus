@@ -19,6 +19,5 @@
     (match [clauses]
       [([] :seq)] []
       [([clause] :seq)] clause
-      :else (vec (apply concat
-                        [(str/join op (map (comp force-parens first) clauses))]
-                        (map rest clauses))))))
+      :else (vec (cons (str/join op (map (comp force-parens first) clauses))
+                       (apply concat (map rest clauses)))))))

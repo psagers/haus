@@ -5,8 +5,8 @@
             [haus.db :as db]
             [haus.web.util.http :refer [bad-request conflict server-error]]
             [ring.util.response :refer [response?]]
-            [slingshot.slingshot :refer [try+]]
-            [taoensso.timbre :as timbre])
+            [taoensso/timbre :as timbre]
+            [slingshot.slingshot :refer [try+]])
   (:import (java.sql SQLIntegrityConstraintViolationException)))
 
 (defn with-logging [handler]
@@ -18,7 +18,7 @@
   "Ensures that we have a database connection in @db/*db-con*. This will not
   overwrite an existing connection, primarily to avoid interfering with test
   transactions.
-  
+
   TODO: Add connection pooling."
   [handler]
   (fn [req]
