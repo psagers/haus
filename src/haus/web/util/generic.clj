@@ -4,14 +4,18 @@
   conversion is required between the two layers, these will probably hinder
   more than help."
   (:require [clojure.spec.alpha :as s]
-            [compojure.route :refer [not-found]]
+            [clojure.java.jdbc :as jdbc]
             [failjure.core :as f]
             [haus.core.util :as util]
-            [haus.web.util.http :refer [bad-request url-join]]
+            [haus.db :as db]
+            [haus.web.util.http :refer [bad-request not-found url-join]]
+            [io.pedestal.interceptor :as interceptor]
+            [io.pedestal.http.route :as route]
             [ring.core.spec]
             [ring.util.request :refer [request-url]]
             [ring.util.response :refer [created response]]
-            [taoensso.truss :refer [have]]))
+            [taoensso.truss :refer [have]]
+            [taoensso.timbre :refer [info]]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -27,25 +31,34 @@
 (s/def ::spec any?)
 
 ; A function that retrieves a database object.
-(s/def ::get-fn (s/fspec :args (s/cat :id pos-int?)
+(s/def ::get-fn (s/fspec :args (s/cat :conn ::db/conn
+                                      :id pos-int?)
                          :ret map?))
 
 ; A function that inserts a database object.
-(s/def ::insert-fn (s/fspec :args (s/cat :obj map?)
+(s/def ::insert-fn (s/fspec :args (s/cat :conn ::db/conn
+                                         :obj map?)
                             :ret pos-int?))
 
 ; A function that updates a database object.
-(s/def ::update-fn (s/fspec :args (s/cat :id pos-int?
+(s/def ::update-fn (s/fspec :args (s/cat :conn ::db/conn
+                                         :id pos-int?
                                          :obj map?)
                             :ret pos-int?))
 
 ; A function that deletes a database object.
-(s/def ::delete-fn (s/fspec :args (s/cat :id pos-int?)
+(s/def ::delete-fn (s/fspec :args (s/cat :conn ::db/conn
+                                         :id pos-int?)
                             :ret boolean?))
+
+; A function that generates a URL for an object ID.
+(s/def ::url-fn (s/fspec :args (s/cat :req :ring/request
+                                      :obj_id (s/nilable pos-int?))
+                         :ret string?))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Body
+; Util
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn ^:private conform-body
@@ -67,24 +80,26 @@
 
 (defn new-obj!
   "Generic handler for creating a new object."
-  [{body :body, :as req} {:keys [key-ns spec get-fn insert-fn]}]
-  (f/attempt-all [obj (conform-body key-ns spec body)
-                  obj_id (insert-fn obj)]
-    (created (url-join (request-url req) (have int? obj_id))
-             (get-fn obj_id))))
+  [{db-spec ::db/spec, body :body, :as req} {:keys [key-ns spec get-fn insert-fn url-fn]}]
+  (jdbc/with-db-transaction [conn db-spec]
+    (f/attempt-all [obj (conform-body key-ns spec body)
+                    obj_id (insert-fn conn obj)]
+      (created (url-fn req (have int? obj_id))
+               (get-fn conn obj_id)))))
 
 (s/fdef new-obj!
   :args (s/cat :req :ring/request
-               :opts (s/keys :req-un [::key-ns ::spec ::get-fn ::insert-fn]))
+               :opts (s/keys :req-un [::key-ns ::spec ::get-fn ::insert-fn ::url-fn]))
   :ret :ring/response)
 
 
 (defn get-obj
   "Generic handler for retrieving a single object."
-  [{{id :id} :params} {:keys [get-fn]}]
-  (if-let [obj (get-fn id)]
-    (response obj)
-    (not-found "")))
+  [{db-spec ::db/spec, {id :id} :path-params} {:keys [get-fn]}]
+  (jdbc/with-db-connection [conn db-spec]
+    (if-let [obj (get-fn conn id)]
+      (response obj)
+      (not-found ""))))
 
 (s/fdef get-obj
   :args (s/cat :req :ring/request
@@ -94,11 +109,12 @@
 
 (defn update-obj!
   "Generic handler for updating an existing object."
-  [{{id :id} :params, body :body} {:keys [key-ns spec get-fn update-fn]}]
-  (f/attempt-all [obj (conform-body key-ns spec body)]
-    (if (update-fn id obj)
-      (response (get-fn id))
-      (not-found ""))))
+  [{db-spec ::db/spec, {id :id} :path-params, body :body} {:keys [key-ns spec get-fn update-fn]}]
+  (jdbc/with-db-transaction [conn db-spec]
+    (f/attempt-all [obj (conform-body key-ns spec body)]
+      (if (update-fn conn id obj)
+        (response (get-fn conn id))
+        (not-found "")))))
 
 (s/fdef update-obj!
   :args (s/cat :req :ring/request
@@ -108,10 +124,11 @@
 
 (defn delete-obj!
   "Generic handler for deleting an existing object."
-  [{{id :id} :params} {:keys [delete-fn]}]
-  (if (delete-fn id)
-    (response "")
-    (not-found "")))
+  [{db-spec ::db/spec, {id :id} :path-params} {:keys [delete-fn]}]
+  (jdbc/with-db-transaction [conn db-spec]
+    (if (delete-fn conn id)
+      (response "")
+      (not-found ""))))
 
 (s/fdef update-obj!
   :args (s/cat :req :ring/request
@@ -122,6 +139,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Other helpers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def ^{:doc "Interceptor to decode the :id param as an integer."} decode-id-param
+  (interceptor/interceptor
+    {:name ::decode-id-param
+     :enter #(update-in % [:request :path-params :id] util/to-int)}))
 
 (defn wrap-id-param
   "Middleware to decode the :id param as an integer."

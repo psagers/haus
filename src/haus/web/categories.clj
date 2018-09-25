@@ -1,21 +1,31 @@
 (ns haus.web.categories
-  (:require [compojure.core :refer [ANY defroutes]]
-            [haus.db.categories :as db]
-            [haus.web.util.generic :as generic :refer [wrap-id-param]]
+  (:require [haus.db.categories :as db]
+            [haus.web.util.generic :as generic]
             [haus.web.util.http :refer [defresource]]
-            [ring.util.response :refer [response]]))
+            [clojure.core.async :as async]
+            [ring.util.response :refer [response]]
+            [io.pedestal.http.route :as route]
+            [taoensso.timbre :refer [info]]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Generic options
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn url-for [req category_id]
+  (if category_id
+    (route/url-for ::category, :request req
+                               :path-params {:id category_id})
+    (route/url-for ::categories, :request req)))
+
+
 (def generic-opts
   {:key-ns "haus.db.categories"
    :get-fn db/get-category
    :insert-fn db/insert-category!
    :update-fn db/update-category!
-   :delete-fn db/delete-category!})
+   :delete-fn db/delete-category!
+   :url-fn url-for})
 
 (defn opts-with-spec
   [spec]
@@ -29,8 +39,8 @@
 (defresource categories)
 
 (defmethod categories :get
-  [req]
-  (response (db/get-categories)))
+  [{db-spec :haus.db/spec}]
+  (response (db/get-categories db-spec)))
 
 (defmethod categories :post
   [req]
@@ -60,6 +70,8 @@
 ; Routes
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defroutes routes
-  (ANY "/" req categories)
-  (ANY ["/:id", :id #"\d+"] req (wrap-id-param category)))
+(defn routes [prefix]
+  [prefix {:any `categories}
+    ["/:id" ^:constraints {:id #"\d+"}
+            ^:interceptors [generic/decode-id-param]
+            {:any `category}]])

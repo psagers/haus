@@ -13,7 +13,7 @@
 (def params-spec (s/keys :req [::c/name]))
 
 
-(deftest categories
+(deftest categories-db
   (let [conn util/*db-conn*]
     (doseq [params (gen/sample (s/gen params-spec) 100)]
       (let [id (c/insert-category! conn params)]
@@ -24,3 +24,21 @@
           (is (submap? params (c/get-category conn id))))
         (is (c/delete-category! conn id))
         (is (nil? (c/get-category conn id)))))))
+
+
+(defn response-for [& args]
+  (apply util/response-for (concat args [:qualifier "haus.db.categories"])))
+
+(deftest categories-web
+  (let [service-fn (get-in util/*system* [:http :server :io.pedestal.http/service-fn])
+        response-for (partial response-for service-fn)]
+    (doseq [params (gen/sample (s/gen params-spec) 100)]
+      (let [{id ::c/id} (:body (response-for :post "/categories", :json params))
+            obj_url (str "/categories/" id)]
+        (is (every? #(submap? params %) (:body (response-for :get "/categories"))))
+        (is (submap? params (:body (response-for :get obj_url))))
+        (let [params (gen/generate (s/gen params-spec))]
+          (response-for :post obj_url, :json params)
+          (is (submap? params (:body (response-for :get obj_url)))))
+        (is (response-for :delete obj_url))
+        (is (= 404 (:status (response-for :get obj_url))))))))

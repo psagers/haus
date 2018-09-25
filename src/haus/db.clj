@@ -24,7 +24,7 @@
 ; Component
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defrecord Database [config conn]
+(defrecord Database [config spec]
   component/Lifecycle
 
   (start [this]
@@ -36,12 +36,12 @@
                  (.setJdbcUrl url)
                  (.setUser user)
                  (.setPassword password))]
-      (assoc this :conn {:datasource pool})))
+      (assoc this :spec {:datasource pool})))
 
   (stop [this]
-    (when-let [pool (get conn :datasource)]
+    (when-let [pool (get spec :datasource)]
       (.close pool))
-    (assoc this :conn nil)))
+    (assoc this :spec nil)))
 
 
 (defn new-database []
@@ -60,28 +60,28 @@
     :db (component/using (new-database) [:config])))
 
 
-(defn migratus-config [db-conn]
+(defn migratus-config [db-spec]
   {:store :database
    :migration-dir "migrations"
-   :db db-conn})
+   :db db-spec})
 
-(defn migrate [config]
-  (migratus/migrate config))
+(defn migrate [db-spec]
+  (migratus/migrate (migratus-config db-spec)))
 
-(defn rollback [config]
-  (migratus/rollback config))
+(defn rollback [db-spec]
+  (migratus/rollback (migratus-config db-spec)))
 
-(defn up [config ids]
-  (apply migratus/up ids))
+(defn up [db-spec ids]
+  (apply migratus/up (migratus-config db-spec) ids))
 
-(defn down [config ids]
-  (apply migratus/down config ids))
+(defn down [db-spec ids]
+  (apply migratus/down (migratus-config db-spec) ids))
 
-(defn reset [config]
-  (migratus/reset config))
+(defn reset [db-spec]
+  (migratus/reset (migratus-config db-spec)))
 
-(defn pending-list [config]
-  (migratus/pending-list config))
+(defn pending-list [db-spec]
+  (migratus/pending-list (migratus-config db-spec)))
 
 
 (defn -main
@@ -98,12 +98,12 @@
 
   ([action & args]
    (let [sys (component/start (db-system))
-         config (migratus-config (get-in sys [:db :conn]))]
+         db-spec (get-in sys [:db :spec])]
      (case action
-       ("migrate") (migrate config)
-       ("rollback") (rollback config)
-       ("up") (up config (map to-int args))
-       ("down") (down config (map to-int args))
-       ("reset") (reset config)
-       ("pending-list") (println (pending-list config))
+       ("migrate") (migrate db-spec)
+       ("rollback") (rollback db-spec)
+       ("up") (up db-spec (map to-int args))
+       ("down") (down db-spec (map to-int args))
+       ("reset") (reset db-spec)
+       ("pending-list") (println (pending-list db-spec))
        (println (str "Unknown db action: " action))))))

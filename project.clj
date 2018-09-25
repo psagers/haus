@@ -3,6 +3,8 @@
   :url "https://bitbucket.org/psagers/haus/"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
+
+  :min-lein-version "2.0.0"
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/core.match "0.3.0-alpha5"]
                  [org.clojure/data.json "0.2.6"]
@@ -23,22 +25,21 @@
                  [migratus "1.0.8"]
                  [clj-time "0.14.4"]
 
-                 ; Pedestal
+                 ; HTTP
                  [io.pedestal/pedestal.service "0.5.4"]
                  [io.pedestal/pedestal.jetty "0.5.4"]
+                 [ring/ring-spec "0.0.4"]
 
                  ; Misc
                  [com.taoensso/truss "1.5.0"]
                  [slingshot "0.12.2"]
                  [failjure "1.3.0"]]
 
-  :min-lein-version "2.0.0"
-  :target-path "target/%s"
-  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
+  :profiles {:dev {:source-paths ["src" "dev"]
+                   :dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [org.clojure/test.check "0.9.0"]
                                   [io.pedestal/pedestal.service-tools "0.5.4" :exclusions [ch.qos.logback/logback-classic]]
                                   [circleci/circleci.test "0.4.1" :exclusions [org.clojure/data.xml]]]
-                   :aliases {"run-dev" ["trampoline" "run" "-m" "haus.main/run-dev"]}
                    :repl-options {:init-ns user}}
              :warn {:global-vars {*warn-on-reflection* true}}
              :uberjar {:aot haus.main}}

@@ -1,6 +1,7 @@
 (ns user
   (:require [com.stuartsierra.component :as component]
             [clojure.tools.namespace.repl :refer [refresh]]
+            [io.pedestal.test :refer [response-for]]
             [haus.main :as main]))
 
 
@@ -26,6 +27,10 @@
   (stop)
   (refresh :after 'user/go))
 
+(defn service-fn
+  "Quick access to the http service function."
+  []
+  (get-in system [:http :server :io.pedestal.http/service-fn]))
 
 (defn db
   "Quick access to the configured database spec."

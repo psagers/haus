@@ -1,6 +1,7 @@
 (ns haus.web.util.http
   (:require [clojure.string :as str]
             [failjure.core :as f]
+            [io.pedestal.interceptor :as interceptor]
             [ring.util.response :as resp]
             [taoensso.truss :refer [have]]))
 
@@ -12,6 +13,16 @@
 ; automatically generate the :options method as well as a default handler to
 ; generate a 405 (Method not allowed) response.
 ;
+
+; By default, IntoInterceptor handles clojure.lang.Fn, but not
+; clojure.lang.MultiFn.
+(extend-protocol interceptor/IntoInterceptor
+  clojure.lang.MultiFn
+  (-interceptor [t]
+    (interceptor/interceptor
+      {:enter (fn [context]
+                (assoc context :response (t (:request context))))})))
+
 
 (defmacro defresource
   "This is a relatively simple wrapper around defmulti. It automatically
@@ -68,6 +79,7 @@
       (->FinalResponse ~status {} body#))))
 
 (make-final-response bad-request 400)
+(make-final-response not-found 404)
 (make-final-response conflict 409)
 (make-final-response server-error 500)
 
