@@ -24,12 +24,6 @@
 ; These are keys for the second parameter of each generic handler.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; A namespace for qualifying keys in the JSON body.
-(s/def ::key-ns string?)
-
-; A spec to validate the JSON body.
-(s/def ::spec any?)
-
 ; A function that retrieves a database object.
 (s/def ::get-fn (s/fspec :args (s/cat :conn ::db/conn
                                       :id pos-int?)
@@ -58,19 +52,6 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Util
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn ^:private conform-body
-  [key-ns spec body]
-  (let [body (util/keywordize-keys-safe body key-ns)
-        body' (s/conform spec body)]
-    (if-not (= body' ::s/invalid)
-      body'
-      (bad-request (s/explain-str spec body)))))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Generic handlers
 ;
 ; Each handler takes a request and a map. The map contains parameters for
@@ -80,16 +61,15 @@
 
 (defn new-obj!
   "Generic handler for creating a new object."
-  [{db-spec ::db/spec, body :body, :as req} {:keys [key-ns spec get-fn insert-fn url-fn]}]
+  [{db-spec ::db/spec, body :body, :as req} {:keys [get-fn insert-fn url-fn]}]
   (jdbc/with-db-transaction [conn db-spec]
-    (f/attempt-all [obj (conform-body key-ns spec body)
-                    obj_id (insert-fn conn obj)]
+    (let [obj_id (insert-fn conn body)]
       (created (url-fn req (have int? obj_id))
                (get-fn conn obj_id)))))
 
 (s/fdef new-obj!
   :args (s/cat :req :ring/request
-               :opts (s/keys :req-un [::key-ns ::spec ::get-fn ::insert-fn ::url-fn]))
+               :opts (s/keys :req-un [::get-fn ::insert-fn ::url-fn]))
   :ret :ring/response)
 
 
@@ -109,16 +89,15 @@
 
 (defn update-obj!
   "Generic handler for updating an existing object."
-  [{db-spec ::db/spec, {id :id} :path-params, body :body} {:keys [key-ns spec get-fn update-fn]}]
+  [{db-spec ::db/spec, {id :id} :path-params, body :body} {:keys [get-fn update-fn]}]
   (jdbc/with-db-transaction [conn db-spec]
-    (f/attempt-all [obj (conform-body key-ns spec body)]
-      (if (update-fn conn id obj)
+      (if (update-fn conn id body)
         (response (get-fn conn id))
-        (not-found "")))))
+        (not-found ""))))
 
 (s/fdef update-obj!
   :args (s/cat :req :ring/request
-               :opts (s/keys :req-un [::key-ns ::spec ::get-fn ::update-fn]))
+               :opts (s/keys :req-un [::get-fn ::update-fn]))
   :ret :ring/response)
 
 
@@ -140,7 +119,32 @@
 ; Other helpers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def ^{:doc "Interceptor to decode the :id param as an integer."} decode-id-param
+(defn ^:private conform-body-enter [qualifier specs]
+  (fn [context]
+    (let [verb (get-in context [:request :request-method])]
+      (if-let [spec (get specs verb)]
+        (let [body (-> context
+                       (get-in [:request :body])
+                       (util/keywordize-keys-safe qualifier))
+              body' (s/conform spec body)]
+           (if-not (= body' ::s/invalid)
+             (assoc-in context [:request :body] body')
+             (assoc context :response
+                    (bad-request (s/explain-str spec body)))))
+        context))))
+
+(defn conform-body
+  "Returns an interceptor for conforming the body to a spec.
+
+  qualifier: A namespace (as a string) to qualify incoming keys.
+  specs: A map of request methods to specs."
+  [qualifier specs]
+  (interceptor/interceptor
+    {:name ::conform-body
+     :enter (conform-body-enter qualifier specs)}))
+
+(def ^{:doc "Interceptor to decode the :id path-param as an integer."}
+  decode-id-param
   (interceptor/interceptor
     {:name ::decode-id-param
      :enter #(update-in % [:request :path-params :id] util/to-int)}))

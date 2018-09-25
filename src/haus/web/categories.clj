@@ -20,16 +20,11 @@
 
 
 (def generic-opts
-  {:key-ns "haus.db.categories"
-   :get-fn db/get-category
+  {:get-fn db/get-category
    :insert-fn db/insert-category!
    :update-fn db/update-category!
    :delete-fn db/delete-category!
    :url-fn url-for})
-
-(defn opts-with-spec
-  [spec]
-  (assoc generic-opts :spec spec))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -44,7 +39,7 @@
 
 (defmethod categories :post
   [req]
-  (generic/new-obj! req (opts-with-spec ::db/insert-params)))
+  (generic/new-obj! req generic-opts))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -59,7 +54,7 @@
 
 (defmethod category :post
   [req]
-  (generic/update-obj! req (opts-with-spec ::db/update-params)))
+  (generic/update-obj! req generic-opts))
 
 (defmethod category :delete
   [req]
@@ -70,8 +65,15 @@
 ; Routes
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn conform-body
+  [specs]
+  (generic/conform-body "haus.db.categories" specs))
+
 (defn routes [prefix]
-  [prefix {:any `categories}
+  [prefix ^:interceptors [(conform-body {:post ::db/insert-params})]
+          {:any `categories}
+
     ["/:id" ^:constraints {:id #"\d+"}
-            ^:interceptors [generic/decode-id-param]
+            ^:interceptors [generic/decode-id-param
+                            (conform-body {:post ::db/update-params})]
             {:any `category}]])

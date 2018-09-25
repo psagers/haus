@@ -36,7 +36,7 @@
   "Encodes applicable response bodies as JSON."
   [response]
   (let [body (:body response)
-        content-type (find-header response "content-type")]
+        content-type (find-header response "Content-Type")]
     (if (and (coll? body) (not content-type))
       (-> response
           (assoc :body (json/write-str body))

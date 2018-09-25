@@ -87,7 +87,8 @@
     (not-empty (re-find #"^application/(.+\+)?json" content-type))))
 
 (defn response-for
-  "A wrapper for io.pedestal.test/response-for that handles JSON."
+  "A wrapper for io.pedestal.test/response-for that handles JSON and qualified
+  keywords."
   [service-fn verb url & {:keys [json body headers qualifier]}]
   (let [[body headers] (if (and json (not body))
                           [(json/write-str json) (assoc headers "Content-Type" "application/json")]
