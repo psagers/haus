@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.test :refer [deftest is]]
+            [ring.util.response :refer [find-header]]
             [haus.core.util :refer [submap?]]
             [haus.db.people :as people :refer [model]]
             [haus.db.util.model :as model]
@@ -40,8 +41,8 @@
         response-for (partial response-for service-fn)]
     (doseq [params (gen/sample (s/gen params-spec) 100)]
       ; Add a new person and make sure we get it back.
-      (let [{id ::people/id} (:body (response-for :post "/people", :json params))
-            obj_url (str "/people/" id)]
+      (let [response (response-for :post "/people", :json params)
+            [_ obj_url] (find-header response "Location")]
         (is (every? #(submap? params %) (:body (response-for :get "/people"))))
         (is (submap? params (:body (response-for :get obj_url))))
 

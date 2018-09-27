@@ -28,14 +28,14 @@
 (defresource root)
 
 (def categories
-  (resource/simple-resource "haus.web.categories"
-                            categories/model
+  (resource/simple-resource categories/model
+                            "haus.web.categories"
                             ::categories/insert-params
                             ::categories/update-params))
 
 (def people
-  (resource/simple-resource "haus.web.people"
-                            people/model
+  (resource/simple-resource people/model
+                            "haus.web.people"
                             ::people/insert-params
                             ::people/update-params))
 

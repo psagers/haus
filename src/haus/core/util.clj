@@ -89,8 +89,11 @@
   (every? (fn [[k v]] (= (get m2 k) v)) m1))
 
 
-(defn have-instance? [cls value]
-  (have (partial instance? cls) value))
+(defmacro have-instance? [cls value]
+  `(have (partial instance? ~cls) ~value))
+
+(defmacro have-satisfies? [proto value]
+  `(have (partial satisfies? ~proto) ~value))
 
 (defn until-failed
   "Returns a lazy sequence of items from coll util it encounters a failure.

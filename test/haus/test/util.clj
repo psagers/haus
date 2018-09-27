@@ -7,22 +7,27 @@
             [io.pedestal.test]
             [haus.db :as db]
             [haus.main :as main]
-            [taoensso.timbre :refer [warn]]))
+            [taoensso.timbre :refer [warn]]
+            [taoensso.truss :refer [have]]))
 
 
-; The test component system (when tests are running).
+; The running test component system (when tests are running).
 (def ^:dynamic *system* nil)
 
 ; Tests must use this for all database access. Each test will be run in a
 ; transaction that gets rolled back at the end.
 (def ^:dynamic *db-conn* nil)
 
-
+; The system we'll be testing under.
 (defn ^:private test-system [dbname]
   (main/system {:logging {:level :warn}}
                {:env :test
                 :db {:dbname dbname}}))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Fixtures
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn ^:private run-with-test-system [f]
   ; We'll need a normal database connection to create the test database.
@@ -70,17 +75,10 @@
      (clojure.test/use-fixtures :once with-test-system)
      (clojure.test/use-fixtures :each with-transaction ~@each)))
 
-(defn response-content-type
-  "Returns the content-type of a response (ignoring parameters)."
-  [response]
-  (if-let [content-type (second (find-header response "content-type"))]
-    (second (re-find #"^(.*?)(?:;|$)" content-type))))
 
-(defn response-json
-  "Decodes the body of a response as JSON."
-  [response]
-  (is (= "application/json" (response-content-type response)))
-  (json/read-str (:body response), :key-fn keyword))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Utils
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn ^:private json-response? [response]
   (if-let [[_ content-type] (find-header response "content-type")]
@@ -91,9 +89,13 @@
   keywords."
   [service-fn verb url & {:keys [json body headers qualifier]}]
   (let [[body headers] (if json
-                          [(json/write-str json) (assoc headers "Content-Type" "application/json")]
+                          [(json/write-str (have coll? json)) (assoc headers "Content-Type" "application/json")]
                           [body headers])
-         response (io.pedestal.test/response-for service-fn verb url, :body body, :headers headers)]
+         response (io.pedestal.test/response-for (have fn? service-fn)
+                                                 (have keyword? verb)
+                                                 (have string? url)
+                                                 :body body
+                                                 :headers headers)]
     (if (json-response? response)
       (update response :body #(json/read-str %, :key-fn (partial keyword qualifier)))
       response)))
