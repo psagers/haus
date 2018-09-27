@@ -4,9 +4,8 @@
             [clojure.instant :as inst]
             [clojure.java.jdbc :as jdbc]
             [clojure.spec.alpha :as s]
-            [clojure.spec.gen.alpha :as sgen]
+            [clojure.spec.gen.alpha :as gen]
             [clojure.string :as str]
-            [clojure.test.check.generators :as gen]
             [haus.core.spec :as spec]
             [haus.core.util :as util]
             [haus.db :as db]
@@ -28,12 +27,13 @@
   "Generates amount values in a sensible range. This starts at [-]100.00M to
   avoid generating a bunch of 0.0x values. It's cosmetic as much as anything."
   []
-  (gen/let [magnitude (gen/large-integer* {:min 1, :max 999990000})
-            sign (gen/elements [-1 1])]
-    (-> (bigdec magnitude)
-        (+ 9999M)
-        (/ 100M)
-        (* sign))))
+  (letfn [(amount-gen' [[magnitude sign]]
+            (-> (bigdec magnitude)
+                (+ 9999M)
+                (/ 100M)
+                (* sign)))]
+    (gen/fmap amount-gen' (gen/tuple (gen/large-integer* {:min 1, :max 999990000})
+                                     (gen/elements [-1 1])))))
 
 
 (s/def ::transaction_id pos-int?)
@@ -51,8 +51,8 @@
                     :string spec/sql-date-str))
 (s/def ::category_id spec/pos-int-32)
 (s/def ::title (s/with-gen (s/and string? #(<= 1 (count %) 50))
-                           (fn [] gen/string-ascii)))
-(s/def ::description (s/with-gen string? (fn [] gen/string-ascii)))
+                           gen/string-ascii))
+(s/def ::description (s/with-gen string? gen/string-ascii))
 (s/def ::tags (s/coll-of spec/tag))
 (s/def ::splits (s/and (s/coll-of ::split)
                        #(or (empty? %) (apply distinct? (map ::person_id %)))

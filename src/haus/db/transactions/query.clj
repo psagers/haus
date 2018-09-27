@@ -1,8 +1,7 @@
 (ns haus.db.transactions.query
   "Specs for transaction queries."
   (:require [clojure.spec.alpha :as s]
-            [clojure.spec.gen.alpha :as sgen]
-            [clojure.test.check.generators :as gen]
+            [clojure.spec.gen.alpha :as gen]
             [clojure.string :as str]
             [haus.core.spec :as spec]
             [haus.core.util :as util]))

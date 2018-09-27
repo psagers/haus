@@ -1,8 +1,7 @@
 (ns haus.core.spec
   "Wrappers and utilities for spec."
   (:require [clojure.spec.alpha :as s]
-            [clojure.spec.gen.alpha :as sgen]
-            [clojure.test.check.generators :as gen]
+            [clojure.spec.gen.alpha :as gen]
             [clojure.string :as str]
             [haus.core.util :as util :refer [unqualify]])
   (:import (org.joda.time DateTime)))
@@ -33,9 +32,8 @@
   "A spec that matches and generates valid tags."
   (s/with-gen (simple-conformer util/tag? str/lower-case)
               (fn []
-                (gen/let [head gen/char-alpha
-                          tail (gen/vector (gen/elements "abcdefghijklmnopqrstuvwxyz0123456789_-") 0 19)]
-                  (apply str head tail)))))
+                (gen/fmap str/join (gen/cat (gen/vector (gen/char-alpha) 1)
+                                            (gen/vector (gen/elements "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") 0 19))))))
 
 (def sql-timestamp
   "A spec that matches Inst and generates java.sql.Timestamp."
