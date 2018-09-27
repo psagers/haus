@@ -6,8 +6,10 @@
             [clojure.test.check.clojure-test]
             [clojure.test.check.generators :as gen]
             [haus.db :as db]
+            [haus.db.util.model :as model]
             [haus.db.totals :as tot]
-            [haus.db.transactions :as t]
+            [haus.db.transactions :as t :refer [transactions]]
+            [haus.db.transactions.query :as q]
             [haus.test.util :as util]))
 
 (alias 'stc 'clojure.spec.test.check)
@@ -61,11 +63,11 @@
   ; Insert, retrieve, update, and delete a bunch of transactions.
   (let [conn util/*db-conn*]
     (doseq [params (gen/sample (transaction-gen ::t/insert-params) 100)]
-      (let [txn_id (t/insert-transaction! conn params)]
-        (t/get-transaction conn txn_id)
+      (let [txn_id (model/insert! transactions conn params)]
+        (model/get-one transactions conn txn_id)
         (let [params (gen/generate (transaction-gen ::t/update-params))]
-          (t/update-transaction! conn txn_id params))
-        (t/delete-transaction! conn txn_id)))
+          (model/update! transactions conn txn_id params))
+        (model/delete! transactions conn txn_id)))
 
     ; Every transaction was deleted, so the totals table should be all zeros.
     (let [totals (tot/get-totals conn)
@@ -78,17 +80,17 @@
   (let [conn util/*db-conn*]
     ; Insert 100 transactions
     (doseq [params (gen/sample (transaction-gen ::t/insert-params) 100)]
-      (t/insert-transaction! conn params))
+      (model/insert! transactions conn params))
 
     (let [txn_ids (vec (map :id (jdbc/query conn ["SELECT id FROM transactions"])))]
       ; Modify 30 random transactions.
       (doseq [txn_id (take 30 (shuffle txn_ids))]
         (let [params (gen/generate (transaction-gen ::t/update-params))]
-          (t/update-transaction! conn txn_id params)))
+          (model/update! transactions conn txn_id params)))
 
       ; Delete 30 random transactions.
       (doseq [txn_id (take 30 (shuffle txn_ids))]
-        (t/delete-transaction! conn txn_id)))
+        (model/delete! transactions conn txn_id)))
 
     ; Make sure the totals table is accurate.
     (let [totals (tot/get-totals conn)
@@ -96,11 +98,20 @@
       (is (= expected totals)))))
 
 
+(defn search-transactions [conn params]
+  (model/query transactions conn, :where (q/transaction-query params), :limit 10))
+
+(s/fdef search-transactions
+  :args (s/cat :conn ::db/conn
+               :opts ::q/params)
+  :ret (s/coll-of ::t/transaction))
+
+
 (deftest query
   (let [conn util/*db-conn*]
     (doseq [params (gen/sample (transaction-gen ::t/insert-params) 100)]
-      (t/insert-transaction! conn params))
+      (model/insert! transactions conn params))
 
-    (doseq [result (stest/check `t/get-transactions {::stc/opts {:num-tests 100}
-                                                     :gen {::db/conn #(gen/return conn)}})]
+    (doseq [result (stest/check `search-transactions {::stc/opts {:num-tests 100}
+                                                      :gen {::db/conn #(gen/return conn)}})]
       (clojure.test.check.clojure-test/assert-check (::stc/ret result)))))

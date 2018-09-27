@@ -2,6 +2,7 @@
   "Tools to quickly generate APIs for models."
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [haus.core.util :as util :refer [have-satisfies?]]
             [haus.db.util.model :as model]
             [haus.web.util.http :refer [bad-request defresource not-found]]
@@ -17,18 +18,51 @@
 
 (defprotocol Resource
   "An HTTP resource (and optional subresources)."
-  (routes [this prefix]
+  (-routes [this prefix]
     "Generates a single vector of Pedestal routes (terse style), anchored at
     the given path prefix."))
 
 (defprotocol ModelResource
   "An HTTP resource with an underlying Model. This is required for our generic
   handlers."
-  (model [this]
+  (-model [this]
     "A haus.db.util.model/Model instance.")
 
-  (url-for-obj [this request obj]
+  (-url-for-obj [this request obj]
     "Returns the URL for a specific model object."))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; API
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn routes [resource prefix]
+  (-routes resource prefix))
+
+(defn model [resource]
+  (-model resource))
+
+(defn url-for-obj [resource request obj]
+  (-url-for-obj resource request obj))
+
+
+(s/def ::resource (partial satisfies? Resource))
+(s/def ::model-resource (partial satisfies? ModelResource))
+
+(s/fdef routes
+  :args (s/cat :resource ::resource
+               :prefix (s/and string? (partial str/starts-with? "/")))
+  :ret vector?)
+
+(s/fdef model
+  :args (s/cat :resource ::model-resource)
+  :ret ::model/model)
+
+(s/fdef url-for-obj
+  :args (s/cat :resource ::model-resource
+               :request :ring/request
+               :obj map?)
+  :ret string?)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -57,7 +91,8 @@
               (bad-request (s/explain-str spec body))))))
 
 (defn conform-body
-  "Returns an interceptor for conforming the body to a spec.
+  "Returns an interceptor for conforming the body to a spec, returning a 400
+  response on failure.
 
   qualifier: A namespace (as a string) to qualify incoming keys.
   specs: A map of request methods to body specs."
@@ -144,12 +179,11 @@
 
 (defrecord SimpleResource [model qualifier insert-spec update-spec])
 
-
 (extend-protocol Resource
   SimpleResource
 
-  (routes [{:keys [model qualifier insert-spec update-spec] :as this}, prefix]
-    (let [model-qualifier (:qualifier model)]
+  (-routes [{:keys [model qualifier insert-spec update-spec] :as this}, prefix]
+    (let [model-qualifier (model/qualifier model)]
       [prefix ^:interceptors [(with-resource this)]
               {:any [(keyword qualifier "index")
                      ^:interceptors [(conform-body model-qualifier {:post insert-spec})]
@@ -161,14 +195,13 @@
                        ^:interceptors [(conform-body model-qualifier {:post update-spec})]
                        `object]}]])))
 
-
 (extend-protocol ModelResource
   SimpleResource
 
-  (model [{:keys [model]}]
+  (-model [{:keys [model]}]
     model)
 
-  (url-for-obj [{:keys [model qualifier]}, {:keys [url-for]}, obj]
+  (-url-for-obj [{:keys [model qualifier]}, {:keys [url-for]}, obj]
     (let [model-qualifier (:qualifier model)
           id (get obj (keyword model-qualifier "id"))]
       (@url-for (keyword qualifier "object"), :path-params {:id (have int? id)}))))
@@ -177,3 +210,10 @@
 (defn simple-resource
   [model qualifier insert-spec update-spec]
   (->SimpleResource model qualifier insert-spec update-spec))
+
+(s/fdef simple-resource
+  :args (s/cat :model ::model/model
+               :qualifier string?
+               :insert-spec qualified-keyword?
+               :update-spec qualified-keyword?)
+  :ret (partial instance? SimpleResource))

@@ -18,11 +18,13 @@
 
   ([op clauses {:keys [auto-paren?] :or {auto-paren? true}}]
    (let [force-parens (fn [clause]
+                        ; This is not correct, but it's close enough for
+                        ; present purposes.
                         (if-not (and (str/starts-with? (have string? clause) "(")
                                      (str/ends-with? clause ")"))
                           (str "(" clause ")")
                           clause))
-         op (str " " op " ")
+         op (format " %s " (str/upper-case (have string? op)))
          clauses (remove empty? clauses)]
      (match [clauses]
        [([] :seq)] []
@@ -44,4 +46,8 @@
             (render-entry [[k v]]
               [(str (render-key k) " = ?"), v])]
       (let [clauses (map render-entry this)]
-        (join "AND" clauses {:auto-paren? false})))))
+        (join "AND" clauses {:auto-paren? false}))))
+
+  nil
+  (render [this]
+    nil))
