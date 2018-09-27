@@ -1,16 +1,12 @@
 (ns haus.web
   (:require [com.stuartsierra.component :as component]
-            [io.pedestal.interceptor :as interceptor]
-            [io.pedestal.interceptor.chain :as chain]
+            [haus.db.categories :as categories]
+            [haus.db.people :as people]
+            [haus.web.util.http :refer [defresource]]
+            [haus.web.util.json :as json]
+            [haus.web.util.resource :as resource]
             [io.pedestal.http :as http]
-            [io.pedestal.http.route :as route]
-            [io.pedestal.http.body-params :as body-params]
-            [haus.db :as db]
-            [haus.web.categories]
-            [haus.web.util.http :refer (defresource)]
-            [haus.web.util.json]
-            [ring.util.response :as ring-resp]
-            [taoensso.timbre :refer [info]]))
+            [io.pedestal.interceptor :as interceptor]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -21,9 +17,9 @@
   "Enqueues an interceptor that attaches a database spec to the request."
   [env db]
   (let [enter (if (= env :test)
-                #(assoc-in % [:request ::db/spec] (deref (resolve 'haus.test.util/*db-conn*)))
+                #(assoc-in % [:request :haus.db/spec] (deref (resolve 'haus.test.util/*db-conn*)))
                 (let [db-spec (:spec db)]
-                  #(assoc-in % [:request ::db/spec] db-spec)))]
+                  #(assoc-in % [:request :haus.db/spec] db-spec)))]
     (interceptor/interceptor
       {:name ::db
        :enter enter})))
@@ -31,13 +27,26 @@
 ; No methods allowed at the root for the moment.
 (defresource root)
 
+(def categories
+  (resource/simple-resource "haus.web.categories"
+                            categories/model
+                            ::categories/insert-params
+                            ::categories/update-params))
+
+(def people
+  (resource/simple-resource "haus.web.people"
+                            people/model
+                            ::people/insert-params
+                            ::people/update-params))
+
 (defn routes [env db]
-  [[["/" ^:interceptors [haus.web.util.json/json-body
+  [[["/" ^:interceptors [json/json-body
                          (db-interceptor env db)]
          {:any `root}
 
       ; Nested routes
-      (haus.web.categories/routes "/categories")]]])
+      (resource/routes categories "/categories")
+      (resource/routes people "/people")]]])
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -1,11 +1,11 @@
 (ns user
   (:require [com.stuartsierra.component :as component]
             [clojure.tools.namespace.repl :refer [refresh]]
-            [io.pedestal.test :refer [response-for]]
+            [haus.test.util :refer [response-for]]
             [haus.main :as main]))
 
 
-(def system nil)
+(defonce system nil)
 
 
 (defn init []
@@ -35,4 +35,4 @@
 (defn db
   "Quick access to the configured database spec."
   []
-  (get-in system [:db :conn]))
+  (get-in system [:db :spec]))

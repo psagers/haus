@@ -3,32 +3,33 @@
             [clojure.spec.gen.alpha :as gen]
             [clojure.test :refer [deftest is]]
             [haus.core.util :refer [submap?]]
-            [haus.db.categories :as c]
+            [haus.db.categories :as categories :refer [model]]
+            [haus.db.util.model :as model]
             [haus.test.util :as util]))
 
 
 (util/use-fixtures)
 
 
-(def params-spec (s/keys :req [::c/name]))
+(def params-spec (s/keys :req [::categories/name]))
 
 
 (deftest categories-db
   (let [conn util/*db-conn*]
     (doseq [params (gen/sample (s/gen params-spec) 100)]
       ; Add a new category and make sure we get it back.
-      (let [id (c/insert-category! conn params)]
-        (is (every? #(submap? params %) (c/get-categories conn)))
-        (is (submap? params (c/get-category conn id)))
+      (let [id (model/insert! model conn params)]
+        (is (every? #(submap? params %) (model/query model conn)))
+        (is (submap? params (model/get-one model conn id)))
 
         ; Update it and make sure it's changed.
         (let [params (gen/generate (s/gen params-spec))]
-          (c/update-category! conn id params)
-          (is (submap? params (c/get-category conn id))))
+          (model/update! model conn id params)
+          (is (submap? params (model/get-one model conn id))))
 
         ; Delete it and make sure it's gone.
-        (is (c/delete-category! conn id))
-        (is (nil? (c/get-category conn id)))))))
+        (is (model/delete! model conn id))
+        (is (nil? (model/get-one model conn id)))))))
 
 
 (defn response-for [& args]
@@ -39,7 +40,7 @@
         response-for (partial response-for service-fn)]
     (doseq [params (gen/sample (s/gen params-spec) 100)]
       ; Add a new category and make sure we get it back.
-      (let [{id ::c/id} (:body (response-for :post "/categories", :json params))
+      (let [{id ::categories/id} (:body (response-for :post "/categories", :json params))
             obj_url (str "/categories/" id)]
         (is (every? #(submap? params %) (:body (response-for :get "/categories"))))
         (is (submap? params (:body (response-for :get obj_url))))

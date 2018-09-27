@@ -57,7 +57,7 @@
 (defn get-templates
   "Returns all templates."
   ([con]
-   (let [query "SELECT t.id, t.created_at, t.updated_at, t.date, t.category_id, t.title, t.description, t.tags, json_agg(s) AS splits
+   (let [query "SELECT t.*, json_agg(s) AS splits
                 FROM templates AS t LEFT OUTER JOIN template_splits AS s ON (s.template_id = t.id)
                 GROUP BY t.id"]
      (map decode-template
@@ -71,7 +71,7 @@
     (let [row (encode-template tmpl)
           splits (map encode-split (get tmpl :splits []))
           [{tmpl_id :id}] (jdbc/insert! con :templates row)]
-      (when-not (empty? splits)
+      (when-let [splits (not-empty splits)]
         (jdbc/insert-multi! con :template_splits (map #(assoc % :template_id tmpl_id) splits)))
       tmpl_id)))
 
@@ -82,10 +82,10 @@
     (let [row (encode-template tmpl)
           splits (map encode-split (get tmpl :splits []))]
 
-      (when-not (empty? row)
+      (when-let [row (not-empty row)]
         (jdbc/update! con :templates row ["id = ?", tmpl_id]))
 
-      (when-not (empty? splits)
+      (when-let [splits (not-empty splits)]
         (jdbc/delete! con :splits ["template_id = ?", tmpl_id])
         (jdbc/insert-multi! con :splits (map #(assoc % :template_id tmpl_id) splits))))
     true))

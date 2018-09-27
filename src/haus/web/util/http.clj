@@ -44,10 +44,8 @@
 (defn resource-methods
   "Returns the HTTP methods (as strings) supported by a multi-method resource."
   [handler]
-  (sequence (comp (remove #{:default})
-                  (map name)
-                  (map str/upper-case))
-    (keys (methods handler))))
+  (eduction (remove #{:default}) (map name) (map str/upper-case)
+            (keys (methods handler))))
 
 (defn header-allow
   "Adds an Allow header with the given HTTP methods. The methods are assumed to

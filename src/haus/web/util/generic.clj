@@ -119,43 +119,35 @@
 ; Other helpers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn ^:private conform-body-enter [qualifier specs]
-  (fn [context]
-    (let [verb (get-in context [:request :request-method])]
-      (if-let [spec (get specs verb)]
-        (let [body (-> context
-                       (get-in [:request :body])
-                       (util/keywordize-keys-safe qualifier))
-              body' (s/conform spec body)]
-           (if-not (= body' ::s/invalid)
-             (assoc-in context [:request :body] body')
-             (assoc context :response
-                    (bad-request (s/explain-str spec body)))))
-        context))))
+(defn ^:private -conform-body
+  "Returns a new context with either a conformed body or a 400 response."
+  [context qualifier spec]
+  (let [body (-> context
+                 (get-in [:request :body])
+                 (util/keywordize-keys-safe qualifier))
+        body' (s/conform spec body)]
+     (if (not= body' ::s/invalid)
+       (assoc-in context [:request :body] body')
+       (assoc context :response
+              (bad-request (s/explain-str spec body))))))
 
 (defn conform-body
   "Returns an interceptor for conforming the body to a spec.
 
   qualifier: A namespace (as a string) to qualify incoming keys.
-  specs: A map of request methods to specs."
+  specs: A map of request methods to body specs."
   [qualifier specs]
   (interceptor/interceptor
     {:name ::conform-body
-     :enter (conform-body-enter qualifier specs)}))
+     :enter (fn [context]
+              (let [meth (get-in context [:request :request-method])
+                    spec (get specs meth)]
+                (if spec
+                  (-conform-body context qualifier spec)
+                  context)))}))
 
 (def ^{:doc "Interceptor to decode the :id path-param as an integer."}
   decode-id-param
   (interceptor/interceptor
     {:name ::decode-id-param
      :enter #(update-in % [:request :path-params :id] util/to-int)}))
-
-(defn wrap-id-param
-  "Middleware to decode the :id param as an integer."
-  [handler]
-  (fn [req]
-    (let [req (update-in req [:params :id] #(Integer/parseInt %))]
-      (handler req))))
-
-(s/fdef wrap-id-param
-  :args (s/cat :handler :ring/handler)
-  :ret :ring/handler)

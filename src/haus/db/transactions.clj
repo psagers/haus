@@ -11,7 +11,7 @@
             [haus.core.util :as util]
             [haus.db :as db]
             [haus.db.transactions.query :as q]
-            [haus.db.util :refer [where-join]]
+            [haus.db.util.where :as where]
             [taoensso.truss :refer [have]]))
 
 
@@ -223,7 +223,7 @@
   [params]
   (let [params' (s/conform ::q/params params)]
     (if-not (= params' ::s/invalid)
-      (where-join "AND" (map render-query-param params'))
+      (where/join "AND" (map render-query-param params'))
       (throw (IllegalArgumentException. (s/explain-str ::q/params params))))))
 
 (s/fdef render-query-params

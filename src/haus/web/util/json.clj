@@ -2,13 +2,8 @@
   "Tools for working with JSON, both input and output."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
-            [clojure.string :as str]
-            [failjure.core :as f]
-            [haus.web.util.http :refer [bad-request]]
-            [ring.util.response :refer [header find-header update-header]]
             [io.pedestal.interceptor :as interceptor]
-            [slingshot.slingshot :refer [throw+]]
-            [taoensso.timbre :refer [info]]))
+            [ring.util.response :refer [find-header header]]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -19,15 +14,13 @@
   (if-let [content-type (:content-type request)]
     (not-empty (re-find #"^application/(.+\+)?json" content-type))))
 
-(defn ^:private read-json
-  [request]
+(defn ^:private read-json [request]
   (if (json-request? request)
     (if-let [body (:body request)]
       (with-open [rdr (io/reader body)]
         (json/read rdr)))))
 
-(defn ^:private decode-json-request
-  [request]
+(defn ^:private decode-json-request [request]
   (if-let [body (read-json request)]
     (assoc request :body body)
     request))

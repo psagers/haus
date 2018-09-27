@@ -34,15 +34,15 @@
 
     ; Now spin up a test system and capture the database connection.
     (let [test-sys (component/start (test-system dbname))]
-      (try
-        (binding [*system* test-sys
-                  *db-conn* (get-in test-sys [:db :spec])]
+      (binding [*system* test-sys
+                *db-conn* (get-in test-sys [:db :spec])]
+        (try
           (db/migrate *db-conn*)
-          (f))
-        (finally
-          (component/stop test-sys)
-          (jdbc/execute! spec [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})
-          (component/stop db-sys))))))
+          (f)
+          (finally
+            (component/stop test-sys)
+            (jdbc/execute! spec [(str "DROP DATABASE IF EXISTS " dbname)] {:transaction? false})
+            (component/stop db-sys)))))))
 
 (defn with-test-system
   "This is installed at both the :once level and circleci's :global-fixtures.
@@ -90,7 +90,7 @@
   "A wrapper for io.pedestal.test/response-for that handles JSON and qualified
   keywords."
   [service-fn verb url & {:keys [json body headers qualifier]}]
-  (let [[body headers] (if (and json (not body))
+  (let [[body headers] (if json
                           [(json/write-str json) (assoc headers "Content-Type" "application/json")]
                           [body headers])
          response (io.pedestal.test/response-for service-fn verb url, :body body, :headers headers)]
