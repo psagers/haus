@@ -147,8 +147,8 @@
 
 (defrecord Transactions [])
 
-(extend-protocol model/Model
-  Transactions
+(extend-type Transactions
+  model/Model
 
   (-qualifier [this]
     "haus.db.transactions")

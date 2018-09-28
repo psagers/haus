@@ -16,6 +16,13 @@
    (s/conformer #(if (pred %) (parse %) ::s/invalid) unparse)))
 
 
+(defn satisfies [proto]
+  (partial satisfies? proto))
+
+(defn instance [typ]
+  (partial instance? typ))
+
+
 (def pos-int-32 (s/int-in 1 0x80000000))
 
 (def int-like

@@ -9,17 +9,15 @@
 ;
 ; Specs
 ;
-; We make extensive use of s/conformer to parse strings into native values and
-; to remove the extra structure that s/conform adds.
+; We make extensive use of s/conformer to parse strings into native values.
 ;
 
 (defn ^:private setlike
   [item]
   (s/or :exact item
-        :multi (s/cat :op (spec/token nil "allof" "anyof")
-                      :values (s/+ item))))
+        :multi (s/cat :op (s/? (spec/token nil "allof" "anyof"))
+                      :values (s/* item))))
 
-(s/def ::tag-string (spec/simple-conformer util/tag? str/lower-case))
 (s/def ::pk (s/tuple util/sql-date-str? spec/int-like))
 
 
@@ -32,14 +30,18 @@
         :range (s/tuple (spec/token nil "in") util/sql-date-str? util/sql-date-str?)))
 
 (s/def ::category_id (setlike (s/and spec/int-like pos-int?)))
-(s/def ::text (setlike string?))
-(s/def ::tag (setlike ::tag-string))
+(s/def ::text (setlike (s/and string? not-empty)))
+(s/def ::tag (setlike (spec/simple-conformer util/tag? str/lower-case)))
 (s/def ::person_id (setlike (s/and spec/int-like pos-int?)))
+
 (s/def ::limit (s/and spec/int-like pos-int?))
 
-(s/def ::params
+(s/def ::where-params
   (s/keys :opt-un [::before ::after ::date ::category_id ::text
-                   ::tag ::person_id ::limit]))
+                   ::tag ::person_id]))
+
+(s/def ::limit-params
+  (s/keys :opt-un [::limit]))
 
 
 ;
@@ -59,7 +61,7 @@
 (defn ^:private fail
   "Returns a failure with error messages for the given (invalid) params."
   [params]
-  (let [explanation (s/explain-data ::params params)
+  (let [explanation (s/explain-data ::where-params params)
         problems (::s/problems explanation)
         fields (vec (distinct (map #(get-in % [:path 0]) problems)))
         messages (zipmap fields (map error-message fields))]
@@ -76,7 +78,7 @@
   failure with a map of parameter names (as keywords) to error messages."
   [params]
   (let [params (util/keywordize-keys-safe params)
-        query (s/conform ::params params)]
+        query (s/conform ::where-params params)]
     (if (= query ::s/invalid)
       (fail params)
       query)))

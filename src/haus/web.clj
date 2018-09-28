@@ -2,6 +2,7 @@
   (:require [com.stuartsierra.component :as component]
             [haus.db.categories :as categories]
             [haus.db.people :as people]
+            [haus.web.transactions :refer [transactions]]
             [haus.web.util.http :refer [defresource]]
             [haus.web.util.json :as json]
             [haus.web.util.resource :as resource]
@@ -46,7 +47,8 @@
 
       ; Nested routes
       (resource/routes categories "/categories")
-      (resource/routes people "/people")]]])
+      (resource/routes people "/people")
+      (resource/routes transactions "/transactions")]]])
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

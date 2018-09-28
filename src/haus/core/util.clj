@@ -95,6 +95,7 @@
 (defmacro have-satisfies? [proto value]
   `(have (partial satisfies? ~proto) ~value))
 
+
 (defn until-failed
   "Returns a lazy sequence of items from coll util it encounters a failure.
   If no coll is provided, this returns a transducer. As a transducer, it will

@@ -1,6 +1,7 @@
 (ns haus.db.util.model
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.spec.alpha :as s]
+            [haus.core.spec :as spec]
             [haus.db.util.where :as where]
             [taoensso.truss :refer [have]]))
 
@@ -43,7 +44,7 @@
   (-delete! model conn id))
 
 
-(s/def ::model (partial satisfies? Model))
+(s/def ::model (spec/satisfies Model))
 
 (s/fdef qualifier
   :args (s/cat :model ::model)
@@ -92,8 +93,8 @@
 (defn simple-model [table qualifier]
   (->SimpleModel table qualifier))
 
-(extend-protocol Model
-  SimpleModel
+(extend-type SimpleModel
+  Model
 
   (-qualifier [{:keys [qualifier]}]
     qualifier)

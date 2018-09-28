@@ -1,10 +1,9 @@
 (defproject net.ignorare/haus "0.1.0-SNAPSHOT"
   :description "Haus Accounts (and friends)"
   :url "https://bitbucket.org/psagers/haus/"
-  :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :min-lein-version "2.0.0"
+
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/core.match "0.3.0-alpha5"]
                  [org.clojure/data.json "0.2.6"]
@@ -42,7 +41,7 @@
                                   [circleci/circleci.test "0.4.1" :exclusions [org.clojure/data.xml]]]
                    :repl-options {:init-ns user}}
              :warn {:global-vars {*warn-on-reflection* true}}
-             :uberjar {:aot haus.main}}
+             :uberjar {:aot :all}}
 
   :aliases {"db" ["run" "-m" "haus.db"]
             "test" ["run" "-m" "circleci.test/dir" :project/test-paths]
