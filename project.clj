@@ -5,6 +5,7 @@
   :min-lein-version "2.0.0"
 
   :dependencies [[org.clojure/clojure "1.9.0"]
+                 [org.clojure/core.async "0.4.474"]
                  [org.clojure/core.match "0.3.0-alpha5"]
                  [org.clojure/data.json "0.2.6"]
 
@@ -17,12 +18,15 @@
                  [org.slf4j/log4j-over-slf4j "1.7.25"]
                  [org.slf4j/jcl-over-slf4j "1.7.25"]
 
-                 ; Database
+                 ; PostgreSQL
                  [org.clojure/java.jdbc "0.7.8"]
                  [com.impossibl.pgjdbc-ng/pgjdbc-ng "0.7"]
                  [com.mchange/c3p0 "0.9.5.2"]
                  [migratus "1.0.8"]
                  [clj-time "0.14.4"]
+
+                 ; MongoDB
+                 [org.mongodb/mongodb-driver-async "3.8.2"]
 
                  ; HTTP
                  [io.pedestal/pedestal.service "0.5.4"]

@@ -4,6 +4,7 @@
             [haus.core.config :as config]
             [haus.core.log :as log]
             [haus.db :as db]
+            [haus.mongodb :as mongodb]
             [haus.web :as web]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -24,8 +25,10 @@
             (log/new-logging) [:config])
      :db (component/using
            (db/new-database) [:config])
+     :mongodb (component/using
+                (mongodb/new-database) [:config])
      :http (component/using
-             (web/new-server) [:config :db]))))
+             (web/new-server) [:config :db :mongodb]))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -33,7 +36,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn -main
-  "The entry-point for 'lein run'"
+  "The entry point for 'lein run'"
   [& args]
   (let [sys (component/start (system))]
     (.join (get-in sys [:http :server :io.pedestal.http/server]))))

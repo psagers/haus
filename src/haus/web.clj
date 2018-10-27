@@ -15,7 +15,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn db-interceptor
-  "Enqueues an interceptor that attaches a database spec to the request."
+  "An interceptor that attaches a database spec to the request."
   [env db]
   (let [enter (if (= env :test)
                 #(assoc-in % [:request :haus.db/spec] (deref (resolve 'haus.test.util/*db-conn*)))
@@ -97,7 +97,7 @@
 ; Component
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defrecord Server [config db server]
+(defrecord Server [config db mongodb server]
   component/Lifecycle
 
   (start [this]

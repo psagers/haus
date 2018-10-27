@@ -13,6 +13,11 @@
         :dbname "haus"
         :user "postgres"
         :password nil}
+   :mongodb {:host "localhost"
+             :port nil
+             :dbname "haus"
+             :user nil
+             :password nil}
    :logging {:level :info}})
 
 (defn ^:private load-user-config

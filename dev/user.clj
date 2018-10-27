@@ -1,6 +1,7 @@
 (ns user
   (:require [com.stuartsierra.component :as component]
             [clojure.tools.namespace.repl :refer [refresh]]
+            [haus.mongodb :as mdb]
             [haus.test.util :refer [response-for]]
             [haus.main :as main]))
 
@@ -36,3 +37,8 @@
   "Quick access to the configured database spec."
   []
   (get-in system [:db :spec]))
+
+(defn mdb
+  "Quick access to the configured mongodb database."
+  []
+  (:mongodb system))
