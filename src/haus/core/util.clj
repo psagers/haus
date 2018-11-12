@@ -76,6 +76,17 @@
        #(if (map? %) (into {} (map f %)) %)
        m))))
 
+(defn stringify-keys
+  "The inverse of keywordize-keys."
+  [m & {:keys [all?]}]
+  (letfn [(stringify [k] (cond
+                           (keyword? k) (name k)
+                           all? (str k)
+                           :else k))]
+    (walk/postwalk
+      #(if (map? %) (map-keys stringify %) %)
+      m)))
+
 
 (defn deep-merge
   "Recursively merges maps."
