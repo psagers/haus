@@ -4,6 +4,9 @@
 
   :min-lein-version "2.0.0"
 
+  :source-paths ["src" "ext/mongodb"]
+  :target-path "target/%s"
+
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/core.async "0.4.474"]
                  [org.clojure/core.match "0.3.0-alpha5"]
@@ -26,10 +29,14 @@
                  [clj-time "0.14.4"]
 
                  ; MongoDB
-                 [org.mongodb/mongodb-driver-async "3.8.2"]
+                 [org.mongodb/mongodb-driver-reactivestreams "1.10.0"]
+
+                 ; GraphQL
+                 [com.walmartlabs/lacinia "0.29.0"]
+                 [com.walmartlabs/lacinia-pedestal "0.10.0"]
 
                  ; HTTP
-                 [io.pedestal/pedestal.service "0.5.4"]
+                 [io.pedestal/pedestal.service "0.5.4" :exclusions [org.clojure/tools.analyzer.jvm]]
                  [io.pedestal/pedestal.jetty "0.5.4"]
                  [ring/ring-spec "0.0.4"]
 
@@ -38,10 +45,10 @@
                  [slingshot "0.12.2"]
                  [failjure "1.3.0"]]
 
-  :profiles {:dev {:source-paths ["src" "dev"]
+  :profiles {:dev {:source-paths ["dev"]
                    :dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [org.clojure/test.check "0.9.0"]
-                                  [io.pedestal/pedestal.service-tools "0.5.4" :exclusions [ch.qos.logback/logback-classic]]
+                                  [io.pedestal/pedestal.service-tools "0.5.4" :exclusions [ch.qos.logback/logback-classic org.clojure/tools.analyzer.jvm]]
                                   [circleci/circleci.test "0.4.1" :exclusions [org.clojure/data.xml]]]
                    :repl-options {:init-ns user}}
              :warn {:global-vars {*warn-on-reflection* true}}

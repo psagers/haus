@@ -1,5 +1,6 @@
 (ns haus.core.util
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.core.async :as async :refer [<!]]
+            [clojure.spec.alpha :as s]
             [clojure.walk :as walk]
             [failjure.core :as f]
             [taoensso.truss :refer [have]]))
@@ -107,20 +108,38 @@
   `(have (partial satisfies? ~proto) ~value))
 
 
-(defn until-failed
-  "Returns a lazy sequence of items from coll util it encounters a failure.
+(defn until-pred
+  "Returns a lazy sequence of items from coll util it encounters a value that
+  satisfies the predicate function (presumably some kind of failure).
+
   If no coll is provided, this returns a transducer. As a transducer, it will
   immediately return the first failure (if any) in place of the normal result."
-  ([]
+  ([f]
    (fn [rf]
      (fn
        ([] (rf))
        ([result] (rf result))
        ([result input]
         (cond
-          (f/failed? result) (reduced result)
-          (f/failed? input) (reduced input)
+          (f result) (reduced result)
+          (f input) (reduced input)
           :else (rf result input))))))
 
-  ([coll]
-   (take-while (complement f/failed?) coll)))
+  ([f coll]
+   (take-while (complement f) coll)))
+
+(def until-throwable (until-pred (partial instance? Throwable)))
+(def until-failed (until-pred f/failed?))
+
+
+(defn drain!
+  "Closes a channel and drains all values."
+  ([channel]
+   (drain! channel true))
+
+  ([channel close?]
+   (when close?
+     (async/close! channel))
+   (async/go-loop []
+     (when-some [_ (<! channel)]
+       (recur)))))

@@ -1,0 +1,74 @@
+{:objects
+ {:Person
+  {:fields
+   {:id {:type (non-null ID)
+         :resolve :_id}
+    :name {:type (non-null String)}
+    :retired {:type Boolean}}}
+
+  :Category
+  {:fields
+   {:id {:type (non-null ID)
+         :resolve :_id}
+    :name {:type (non-null String)}
+    :retired {:type Boolean}}}}
+
+  ;:Transaction
+  ;{:fields
+  ; {:id {:type (non-null ID)}
+  ;  :created_at {:type Int}
+  ;  :updated_at {:type Int}
+  ;  :date {:type String}
+  ;  :category {:type :Category
+  ;             :resolve :Transaction/category}
+  ;  :title {:type String}
+  ;  :description {:type String}
+  ;  :tags {:type (list (non-null String))}
+  ;  :splits {:type (list (non-null :Split))}}}
+
+  ;:Template
+  ;{:fields
+  ; {:id {:type (non-null ID)}
+  ;  :category {:type :Category
+  ;             :resolve :Template/Category}
+  ;  :title {:type String}
+  ;  :description {:type String}
+  ;  :tags {:type (list (non-null String))}
+  ;  :splits {:type (list (non-null :Split))}}}
+
+  ;:Split
+  ;{:fields
+  ; {:person {:type :Person
+  ;           :resolve :Split/person}
+  ;  :amount Int}}
+
+  ;:Total
+  ;{:fields
+  ; {:category {:type (non-null :Category)
+  ;             :resolve :Total/category}
+  ;  :person {:type (non-null :Person)
+  ;           :resolve :Total/person}
+  ;  :total {:type (non-null Int)}}}}
+
+
+ :queries
+ {:people
+  {:type (list :Person)
+   :resolve :queries/people}
+
+  :categories
+  {:type (list :Category)
+   :resolve :queries/categories}}}
+
+  ;:transactions
+  ;{:type (non-null (list (non-null :Transaction)))
+  ; :args {}
+  ; :resolve :queries/transactions}
+
+  ;:templates
+  ;{:type (non-null (list (non-null :Template)))
+  ; :resolve :queries/templates}
+
+  ;:totals
+  ;{:type (non-null (list (non-null :Total)))
+  ; :resolve :queries/totals}}}

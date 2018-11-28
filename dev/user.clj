@@ -1,7 +1,10 @@
 (ns user
   (:require [com.stuartsierra.component :as component]
+            [clojure.core.async :as async :refer [<! <!! >! >!!]]
             [clojure.tools.namespace.repl :refer [refresh]]
-            [haus.mongodb :as mdb]
+            [com.walmartlabs.lacinia :as gql]
+            [net.ignorare.mongodb.async.client :as mdb]
+            [haus.core.util :refer [drain!]]
             [haus.test.util :refer [response-for]]
             [haus.main :as main]))
 
@@ -24,6 +27,10 @@
   (init)
   (start))
 
+(defn restart []
+  (stop)
+  (start))
+
 (defn reset []
   (stop)
   (refresh :after 'user/go))
@@ -42,3 +49,21 @@
   "Quick access to the configured mongodb database."
   []
   (:mongodb system))
+
+(defn gql-schema
+  []
+  (get-in system [:graphql :schema]))
+
+(defn simplify
+  "Simplify ordered maps for REPL convenience."
+  [value]
+  (letfn [(f [v] (cond
+                   (map? v) (into {} v)
+                   (sequential? v) (into [] v)
+                   :else v))]
+    (walk/postwalk f value)))
+
+(defn q
+  "GraphQL query shortcut."
+  [query]
+  (simplify (gql/execute (gql-schema) query nil (:graphql system))))
