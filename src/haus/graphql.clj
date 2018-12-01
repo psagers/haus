@@ -3,8 +3,10 @@
             [clojure.java.io :as io]
             [com.stuartsierra.component :as component]
             [com.walmartlabs.lacinia.schema :as schema]
-            [com.walmartlabs.lacinia.util :refer [attach-resolvers]]
-            [haus.graphql.util :refer [resolve-id resolve-documents]]))
+            [com.walmartlabs.lacinia.util :refer [attach-resolvers
+                                                  attach-streamers]]
+            [haus.graphql.util :refer [resolve-id resolve-documents
+                                       stream-documents]]))
 
 
 (defn resolve-people [{conn :db} args value]
@@ -15,6 +17,11 @@
   (resolve-documents conn :categories
                      {:filter {:name {:$type "string"}}}))
 
+(defn stream-categories [{conn :db} args callback]
+  (stream-documents conn :categories
+                    {:filter {:name {:$type "string"}}}))
+
+
 (defn ^:private read-schema [path]
   (with-open [rdr (java.io.PushbackReader. (io/reader path))]
     (edn/read rdr)))
@@ -24,6 +31,7 @@
       (attach-resolvers {:_id resolve-id
                          :queries/people resolve-people
                          :queries/categories resolve-categories})
+      (attach-streamers {:subscriptions/categories stream-categories})
       (schema/compile)))
 
 

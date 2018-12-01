@@ -58,7 +58,12 @@
 
   :categories
   {:type (list :Category)
-   :resolve :queries/categories}}}
+   :resolve :queries/categories}}
+
+ :subscriptions
+ {:categories
+  {:type (list :Category)
+   :stream :subscriptions/categories}}}
 
   ;:transactions
   ;{:type (non-null (list (non-null :Transaction)))
