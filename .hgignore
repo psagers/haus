@@ -3,7 +3,7 @@ pom.xml
 pom.xml.asc
 *.jar
 *.class
-ext/*
+checkouts
 
 syntax: regexp
 ^.nrepl-port

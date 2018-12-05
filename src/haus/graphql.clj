@@ -8,18 +8,19 @@
             [haus.graphql.util :refer [resolve-id resolve-documents
                                        stream-documents]]))
 
+(defn stream-people [{conn :db, changes :changes} args callback]
+  (stream-documents conn
+                    (:pub changes)
+                    :people
+                    {:filter {:name {:$type "string"}}}
+                    callback))
 
-(defn resolve-people [{conn :db} args value]
-  (resolve-documents conn :people
-                     {:filter {:name {:$type "string"}}}))
-
-(defn resolve-categories [{conn :db} args value]
-  (resolve-documents conn :categories
-                     {:filter {:name {:$type "string"}}}))
-
-(defn stream-categories [{conn :db} args callback]
-  (stream-documents conn :categories
-                    {:filter {:name {:$type "string"}}}))
+(defn stream-categories [{conn :db, changes :changes} args callback]
+  (stream-documents conn
+                    (:pub changes)
+                    :categories
+                    {:filter {:name {:$type "string"}}}
+                    callback))
 
 
 (defn ^:private read-schema [path]
@@ -28,10 +29,9 @@
 
 (defn compile-schema []
   (-> (read-schema (io/resource "graphql.edn"))
-      (attach-resolvers {:_id resolve-id
-                         :queries/people resolve-people
-                         :queries/categories resolve-categories})
-      (attach-streamers {:subscriptions/categories stream-categories})
+      (attach-resolvers {:_id resolve-id})
+      (attach-streamers {:subscriptions/people stream-people
+                         :subscriptions/categories stream-categories})
       (schema/compile)))
 
 
@@ -40,7 +40,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; This also serves as the context for the resolvers.
-(defrecord GraphQL [db schema]
+(defrecord GraphQL [db changes schema]
   component/Lifecycle
 
   (start [this]

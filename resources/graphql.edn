@@ -1,17 +1,25 @@
-{:objects
- {:Person
-  {:fields
-   {:id {:type (non-null ID)
-         :resolve :_id}
-    :name {:type (non-null String)}
-    :retired {:type Boolean}}}
+{:enums
+ {:subscription_event
+  {:values [:RESET :UPDATE :DELETE]}}
 
-  :Category
-  {:fields
-   {:id {:type (non-null ID)
-         :resolve :_id}
-    :name {:type (non-null String)}
-    :retired {:type Boolean}}}}
+ :objects
+ {:person
+  {:fields {:id {:type (non-null ID), :resolve :_id}
+            :name {:type (non-null String)}
+            :retired {:type Boolean}}}
+
+  :category
+  {:fields {:id {:type (non-null ID), :resolve :_id}
+            :name {:type (non-null String)}
+            :retired {:type Boolean}}}
+
+  :person_event
+  {:fields {:kind {:type :subscription_event}
+            :values {:type (list :person)}}}
+
+  :category_event
+  {:fields {:kind {:type :subscription_event}
+            :values {:type (list :category)}}}}
 
   ;:Transaction
   ;{:fields
@@ -50,19 +58,13 @@
   ;           :resolve :Total/person}
   ;  :total {:type (non-null Int)}}}}
 
-
- :queries
+ :subscriptions
  {:people
-  {:type (list :Person)
-   :resolve :queries/people}
+  {:type :person_event
+   :stream :subscriptions/people}
 
   :categories
-  {:type (list :Category)
-   :resolve :queries/categories}}
-
- :subscriptions
- {:categories
-  {:type (list :Category)
+  {:type :category_event
    :stream :subscriptions/categories}}}
 
   ;:transactions

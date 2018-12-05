@@ -4,11 +4,11 @@
 
   :min-lein-version "2.0.0"
 
-  :source-paths ["src" "ext/mongodb"]
+  :source-paths ["src"]
   :target-path "target/%s"
 
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.clojure/core.async "0.4.474"]
+                 [org.clojure/core.async "0.4.490"]
                  [org.clojure/core.match "0.3.0-alpha5"]
                  [org.clojure/data.json "0.2.6"]
 
@@ -29,7 +29,7 @@
                  [clj-time "0.14.4"]
 
                  ; MongoDB
-                 [org.mongodb/mongodb-driver-reactivestreams "1.10.0"]
+                 [net.ignorare/reactive-mongo "0.1.0-SNAPSHOT"]
 
                  ; GraphQL
                  [com.walmartlabs/lacinia "0.29.0"]

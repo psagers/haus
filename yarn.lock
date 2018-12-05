@@ -307,6 +307,10 @@ he@^1.1.1:
   version "1.2.0"
   resolved "https://registry.yarnpkg.com/he/-/he-1.2.0.tgz#84ae65fa7eafb165fddb61566ae14baf05664f0f"
 
+highlight.js@^9.13.1, highlight.js@^9.3.0:
+  version "9.13.1"
+  resolved "https://registry.yarnpkg.com/highlight.js/-/highlight.js-9.13.1.tgz#054586d53a6863311168488a0f58d6c505ce641e"
+
 hmac-drbg@^1.0.0:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/hmac-drbg/-/hmac-drbg-1.0.1.tgz#d2745701025a6c775a6c545793ed502fc0c649a1"
@@ -544,7 +548,7 @@ promise@^7.1.1:
   dependencies:
     asap "~2.0.3"
 
-prop-types@^15.6.2:
+prop-types@^15.6.0, prop-types@^15.6.2:
   version "15.6.2"
   resolved "https://registry.yarnpkg.com/prop-types/-/prop-types-15.6.2.tgz#05d5ca77b4453e985d60fc7ff8c859094a497102"
   dependencies:
@@ -603,6 +607,17 @@ react-dom@^16.6.3:
     object-assign "^4.1.1"
     prop-types "^15.6.2"
     scheduler "^0.11.2"
+
+react-flip-move@^3.0.3:
+  version "3.0.3"
+  resolved "https://registry.yarnpkg.com/react-flip-move/-/react-flip-move-3.0.3.tgz#3065b0b9e622ae73953aba725f8feed8e4643667"
+
+react-highlight.js@^1.0.7:
+  version "1.0.7"
+  resolved "https://registry.yarnpkg.com/react-highlight.js/-/react-highlight.js-1.0.7.tgz#eb88356f415ac4d3590c20a9b52c1dc7f51a4861"
+  dependencies:
+    highlight.js "^9.3.0"
+    prop-types "^15.6.0"
 
 react@^16.6.3:
   version "16.6.3"

@@ -6,7 +6,10 @@
             [clojure.tools.namespace.repl :refer [refresh]]
             [clojure.walk :as walk]
             [com.walmartlabs.lacinia :as gql]
-            [net.ignorare.mongodb.async.client :as mdb]
+            [net.ignorare.mongodb.async.collection :as collection]
+            [net.ignorare.mongodb.async.database :as database]
+            [net.ignorare.mongodb.async.session :as session]
+            [net.ignorare.mongodb.async.subscriber :as sub]
             [haus.core.util :refer [drain!]]
             [haus.test.util :refer [response-for]]
             [haus.main :as main]))
@@ -70,3 +73,8 @@
   "GraphQL query shortcut."
   [query]
   (simplify (gql/execute (gql-schema) query nil (:graphql system))))
+
+
+(defn find-categories
+  [conn]
+  (sub/begin (collection/find conn :categories)))
