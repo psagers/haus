@@ -1,25 +1,27 @@
 {:enums
- {:subscription_event
+ {:SubscriptionAction
   {:values [:RESET :UPDATE :DELETE]}}
 
  :objects
- {:person
+ {:Person
   {:fields {:id {:type (non-null ID), :resolve :_id}
             :name {:type (non-null String)}
             :retired {:type Boolean}}}
 
-  :category
+  :Category
   {:fields {:id {:type (non-null ID), :resolve :_id}
             :name {:type (non-null String)}
             :retired {:type Boolean}}}
 
-  :person_event
-  {:fields {:kind {:type :subscription_event}
-            :values {:type (list :person)}}}
+  :PersonEvent
+  {:fields {:action {:type :SubscriptionAction}
+            :docs {:type (list (non-null :Person))}   ; RESET, UPDATE
+            :ids {:type (list (non-null ID))}}}       ; DELETE
 
-  :category_event
-  {:fields {:kind {:type :subscription_event}
-            :values {:type (list :category)}}}}
+  :CategoryEvent
+  {:fields {:action {:type :SubscriptionAction}
+            :docs {:type (list (non-null :Category))}
+            :ids {:type (list (non-null ID))}}}}
 
   ;:Transaction
   ;{:fields
@@ -60,11 +62,11 @@
 
  :subscriptions
  {:people
-  {:type :person_event
+  {:type :PersonEvent
    :stream :subscriptions/people}
 
   :categories
-  {:type :category_event
+  {:type :CategoryEvent
    :stream :subscriptions/categories}}}
 
   ;:transactions

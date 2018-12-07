@@ -3,7 +3,7 @@
   (:require [com.stuartsierra.component :as component]
             [haus.core.config :as config]
             [haus.core.log :as log]
-            [haus.changes :as changes]
+            ;[haus.changes :as changes]
             ;[haus.db :as db]
             [haus.graphql :as graphql]
             [haus.mongodb :as mongodb]
@@ -30,11 +30,10 @@
      ;      (db/new-database) [:config])
      :mongodb (component/using
                (mongodb/new-database) [:config])
-     :changes (component/using
-                (changes/new-changes) {:db :mongodb})
+     ;:changes (component/using
+     ;           (changes/new-changes) {:db :mongodb})
      :graphql (component/using
-                (graphql/new-graphql) {:db :mongodb
-                                       :changes :changes})
+                (graphql/new-graphql) {:db :mongodb})
      :http (component/using
              (web/new-server) [:config :graphql]))))
 

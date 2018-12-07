@@ -1,5 +1,7 @@
 (ns haus.web
-  (:require [com.stuartsierra.component :as component]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [com.stuartsierra.component :as component]
             [com.walmartlabs.lacinia.pedestal :as lp]
             [haus.db.categories :as categories]
             [haus.db.people :as people]
@@ -7,7 +9,9 @@
             [haus.web.util.http :refer [defresource]]
             [haus.web.util.json :as json]
             [haus.web.util.resource :as resource]
+            [hiccup.page :refer [html5]]
             [io.pedestal.http :as http]
+            [io.pedestal.http.route.definition.table :as table]
             [io.pedestal.interceptor :as interceptor]))
 
 
@@ -52,6 +56,57 @@
 ;      (resource/routes transactions "/transactions")]]])
 
 
+(defn page
+  "Renders the main page."
+  [js-name]
+  (html5
+    [:head
+     [:meta {:charset "utf-8"}]
+     [:meta {:name "viewport"
+             :content "width=device-width, initial-scale=1, shrink-to-fit=no"}]
+     [:title "Haus"]
+     [:link {:rel "stylesheet"
+             :href "https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+             :integrity "sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO"
+             :crossorigin "anonymous"}]
+     [:link {:rel "stylesheet"
+             :href "/css/haus.css"}]]
+    [:body
+     [:div#app
+      [:h1 "Loading app..."]]
+     [:script {:src (str "/js/" js-name)}]]))
+
+
+(defn ^:private read-js-manifest []
+  (with-open [rdr (java.io.PushbackReader. (io/reader (io/resource "public/js/manifest.edn")))]
+    (edn/read rdr)))
+
+
+(defn ^:private main-js-filename []
+  (loop [manifest (read-js-manifest)]
+    (let [module (first manifest)]
+      (if (= (:module-id module) :main)
+        (:output-name module)
+        (recur (rest manifest))))))
+
+
+(defn app
+  [request]
+  {:status 200,
+   :headers {"Content-Type" "text/html; charset=utf-8"}
+   :body (page (main-js-filename))})
+
+
+; All unmatched paths should render the app page. The client app can display
+; what it likes, including a 404 message.
+(def app-interceptor
+  {:name ::app
+   :leave (fn [context]
+            (if-not (http/response? (:response context))
+              (assoc context :response (-> context :request app))
+              context))})
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Pedestal
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -69,14 +124,24 @@
   (= (:env service) :prod))
 
 (defn new-service [config graphql]
-  (let [env (get-in config [:config :env] :prod)
+  (let [env (get-in config [:config :env])
         service (lp/service-map (:schema graphql)
                                 {:app-context graphql
+                                 :async true
+                                 :env env
+                                 :graphiql (= env :dev)
+                                 :ide-path "/graphiql"
+                                 :path "/graphql"
                                  :subscriptions true
-                                 :graphiql (= env :dev)})]
-    (assoc service
-           ::http/port (get-in config [:http :port] 8080)
-           ::http/join? false)))
+                                 :subscriptions-path "/graphql-ws"})]
+    (-> service
+        (assoc :env env
+               ::http/type :jetty
+               ::http/host (get-in config [:http :host] "localhost")
+               ::http/port (get-in config [:http :port] 8000)
+               ::http/resource-path "public"
+               ::http/not-found-interceptor app-interceptor
+               ::http/join? false))))
 
 (defn apply-env [service]
   (case (:env service)

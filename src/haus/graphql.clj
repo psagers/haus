@@ -8,19 +8,14 @@
             [haus.graphql.util :refer [resolve-id resolve-documents
                                        stream-documents]]))
 
-(defn stream-people [{conn :db, changes :changes} args callback]
-  (stream-documents conn
-                    (:pub changes)
-                    :people
-                    {:filter {:name {:$type "string"}}}
-                    callback))
+(defn stream-people [{conn :db} args callback]
+  (let [find-opts {:filter {:name {:$type "string"}}}]
+    (stream-documents conn :people find-opts callback)))
 
-(defn stream-categories [{conn :db, changes :changes} args callback]
-  (stream-documents conn
-                    (:pub changes)
-                    :categories
-                    {:filter {:name {:$type "string"}}}
-                    callback))
+
+(defn stream-categories [{conn :db} args callback]
+  (let [find-opts {:filter {:name {:$type "string"}}}]
+    (stream-documents conn :categories find-opts callback)))
 
 
 (defn ^:private read-schema [path]
@@ -40,7 +35,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; This also serves as the context for the resolvers.
-(defrecord GraphQL [db changes schema]
+(defrecord GraphQL [db schema]
   component/Lifecycle
 
   (start [this]
