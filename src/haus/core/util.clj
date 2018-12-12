@@ -63,6 +63,11 @@
                :m map?)
   :ret (s/nilable map?))
 
+(defn remove-nil-values
+  "Transforms a map by removing all entries with nil values."
+  [m]
+  (into {} (remove (comp nil? second)) m))
+
 (defn keywordize-keys-safe
   "Like clojure.walk/keywordize-keys, but with find-keyword. Safe for untrusted
   data."

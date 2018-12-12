@@ -1,31 +1,41 @@
-{:enums
+{:scalars
+ {:ObjectId
+  {:parse :scalars/parse-object-id
+   :serialize :scalars/serialize-object-id}
+
+  ; A non-empty string.
+  :Name
+  {:parse :scalars/parse-name
+   :serialize :scalars/serialize-name}}
+
+ :enums
  {:SubscriptionAction
   {:values [:RESET :UPDATE :DELETE]}}
 
  :objects
  {:Person
-  {:fields {:id {:type (non-null ID), :resolve :_id}
+  {:fields {:id {:type (non-null ObjectId), :resolve :_id}
             :name {:type (non-null String)}
             :retired {:type Boolean}}}
 
   :Category
-  {:fields {:id {:type (non-null ID), :resolve :_id}
+  {:fields {:id {:type (non-null ObjectId), :resolve :_id}
             :name {:type (non-null String)}
             :retired {:type Boolean}}}
 
   :PersonEvent
   {:fields {:action {:type :SubscriptionAction}
             :docs {:type (list (non-null :Person))}   ; RESET, UPDATE
-            :ids {:type (list (non-null ID))}}}       ; DELETE
+            :ids {:type (list (non-null ObjectId))}}}       ; DELETE
 
   :CategoryEvent
   {:fields {:action {:type :SubscriptionAction}
             :docs {:type (list (non-null :Category))}
-            :ids {:type (list (non-null ID))}}}}
+            :ids {:type (list (non-null ObjectId))}}}}
 
   ;:Transaction
   ;{:fields
-  ; {:id {:type (non-null ID)}
+  ; {:id {:type (non-null ObjectId)}
   ;  :created_at {:type Int}
   ;  :updated_at {:type Int}
   ;  :date {:type String}
@@ -38,7 +48,7 @@
 
   ;:Template
   ;{:fields
-  ; {:id {:type (non-null ID)}
+  ; {:id {:type (non-null ObjectId)}
   ;  :category {:type :Category
   ;             :resolve :Template/Category}
   ;  :title {:type String}
@@ -67,7 +77,7 @@
 
   :categories
   {:type :CategoryEvent
-   :stream :subscriptions/categories}}}
+   :stream :subscriptions/categories}}
 
   ;:transactions
   ;{:type (non-null (list (non-null :Transaction)))
@@ -81,3 +91,21 @@
   ;:totals
   ;{:type (non-null (list (non-null :Total)))
   ; :resolve :queries/totals}}}
+
+ :mutations
+ {:new_category
+  {:args {:name {:type (non-null Name)}}
+   :type :Category
+   :resolve :mutations/new-category}
+
+  :update_category
+  {:args {:id {:type (non-null ObjectId)}
+          :name {:type Name}
+          :retired {:type Boolean}}
+   :type :Category
+   :resolve :mutations/update-category}
+
+  :delete_category
+  {:args {:id {:type (non-null ObjectId)}}
+   :type (non-null Boolean)
+   :resolve :mutations/delete-category}}}

@@ -2,20 +2,30 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [com.stuartsierra.component :as component]
-            [com.walmartlabs.lacinia.schema :as schema]
-            [com.walmartlabs.lacinia.util :refer [attach-resolvers
-                                                  attach-streamers]]
-            [haus.graphql.util :refer [resolve-id resolve-documents
-                                       stream-documents]]))
+            [com.walmartlabs.lacinia.schema :as l.s]
+            [com.walmartlabs.lacinia.util :as l.u]
+            [haus.graphql.util :as g.u]))
+
+
+(defn new-category [{conn :db} args _]
+  (g.u/new-document conn :categories
+                  (assoc args :retired false)))
+
+(defn update-category [{conn :db} args _]
+  (g.u/update-document conn :categories args))
+
+(defn delete-category [{conn :db} args _]
+  (g.u/delete-document conn :categories args))
+
 
 (defn stream-people [{conn :db} args callback]
   (let [find-opts {:filter {:name {:$type "string"}}}]
-    (stream-documents conn :people find-opts callback)))
+    (g.u/stream-documents conn :people find-opts callback)))
 
 
 (defn stream-categories [{conn :db} args callback]
   (let [find-opts {:filter {:name {:$type "string"}}}]
-    (stream-documents conn :categories find-opts callback)))
+    (g.u/stream-documents conn :categories find-opts callback)))
 
 
 (defn ^:private read-schema [path]
@@ -24,10 +34,17 @@
 
 (defn compile-schema []
   (-> (read-schema (io/resource "graphql.edn"))
-      (attach-resolvers {:_id resolve-id})
-      (attach-streamers {:subscriptions/people stream-people
-                         :subscriptions/categories stream-categories})
-      (schema/compile)))
+      (l.u/attach-scalar-transformers {:scalars/parse-object-id g.u/parse-object-id
+                                       :scalars/serialize-object-id g.u/serialize-object-id
+                                       :scalars/parse-name g.u/parse-name
+                                       :scalars/serialize-name g.u/serialize-name})
+      (l.u/attach-resolvers {:_id g.u/resolve-id
+                             :mutations/new-category new-category
+                             :mutations/update-category update-category
+                             :mutations/delete-category delete-category})
+      (l.u/attach-streamers {:subscriptions/people stream-people
+                             :subscriptions/categories stream-categories})
+      (l.s/compile)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

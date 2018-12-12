@@ -32,8 +32,8 @@
                  [net.ignorare/reactive-mongo "0.1.0-SNAPSHOT"]
 
                  ; GraphQL
-                 [com.walmartlabs/lacinia "0.29.0"]
-                 [com.walmartlabs/lacinia-pedestal "0.10.0"]
+                 [com.walmartlabs/lacinia "0.31.0-rc-1"]
+                 [com.walmartlabs/lacinia-pedestal "0.11.0-rc-1"]
 
 
                  ; HTTP

@@ -1,11 +1,47 @@
 (ns haus.ui.categories
-  (:require [re-frame.core :as rf]
+  (:require [haus.ui.util :refer [map-by]]
+            [haus.ui.util.events :as events]
+            [haus.ui.util.routes :refer [object-id]]
+            [haus.ui.util.views :as views]
+            [re-frame.core :as rf]
             [re-graph.core :as re-graph]))
 
 
-(defn map-by [key-fn s]
-  (into {} (map (juxt key-fn identity) s)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Database
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(def subscribe-event
+  [::re-graph/subscribe
+   :haus
+   ::stream
+   "{categories{action docs{id name retired} ids}}"
+   {}
+   [::update!]])
+
+
+; Probably never used.
+(def unsubscribe-event
+  [::re-graph/unsubscribe :haus ::stream])
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Routing
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def routes
+  [["" ::index]])
+
+
+; Make sure the subscription is up and running on entry. This should be
+; redundant.
+(defmethod events/route-enter-fx ::index [_ _]
+  {:dispatch subscribe-event})
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Events
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (rf/reg-event-db
   ::update!
@@ -16,6 +52,10 @@
         ("UPDATE") (update-in db [:categories] #(merge % (map-by :id docs)))
         ("DELETE") (update-in db [:categories] #(apply dissoc % ids))))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Subscriptions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; L2: Map of categories by id.
 (rf/reg-sub
@@ -40,14 +80,19 @@
     (get categories id)))
 
 
-(defn subscribe []
-  (rf/dispatch [::re-graph/subscribe
-                :haus
-                ::stream
-                "{categories{action docs{id name retired} ids}}"
-                {}
-                [::update!]]))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Views
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn ^:private category-item [category]
+  [:li (if (:retired category)
+         [:i (:name category)]
+         (:name category))])
 
 
-(defn unsubscribe []
-  (rf/dispatch [::re-graph/unsubscribe :haus ::stream]))
+(defmethod views/content ::index [_]
+  [:div
+   [:h2 "Categories"]
+   [:ul
+     (for [category @(rf/subscribe [::sorted])]
+       ^{:key (:id category)} [category-item category])]])
