@@ -63,16 +63,27 @@
         ("DELETE") (update-in db [:categories] #(apply dissoc % ids))))))
 
 
-(rf/reg-event-db
+(declare modal-body)
+
+(rf/reg-event-fx
   ::begin-editing
-  (fn [db [_ category]]
-    (assoc-in db [:page :editing] category)))
+  (fn [{:keys [db]} [_ category]]
+    {:db (assoc-in db [:page :editing] category)
+     :dispatch [:haus.ui/modal-begin "Edit category" [modal-body]
+                                     :on-cancel [::cancel-editing]
+                                     :on-save [::finish-editing]]}))
 
 
 (rf/reg-event-db
   ::continue-editing
-  (fn [db [_ category]]
-    (assoc-in db [:page :editing] category)))
+  (fn [db [_ updates]]
+    (update-in db [:page :editing] #(merge % updates))))
+
+
+(rf/reg-event-db
+  ::cancel-editing
+  (fn [db _]
+    (assoc-in db [:page :editing] nil)))
 
 
 (rf/reg-event-fx
@@ -129,23 +140,50 @@
 ; Views
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn edit-name [event]
-  (let [input (.-target event)
-        id (.getAttribute input "data-id")
-        value (.-value input)]
-    (rf/dispatch [::continue-editing {:id id, :name value}])))
+(defn name-changed [event]
+  (let [value (-> event .-target .-value)]
+    (rf/dispatch [::continue-editing {:name value}])))
+
+
+(defn retired-changed [event]
+  (let [value (-> event .-target .-checked)]
+    (rf/dispatch [::continue-editing {:retired value}])))
 
 
 (defn update-name [event]
   (rf/dispatch [::finish-editing]))
 
 
+(defn modal-body []
+  (let [category @(rf/subscribe [::editing])]
+    [:div
+     [:div {:class "form-group"}
+      [:label {:for "modal-name"} "Name"]
+      [:input {:type "text"
+               :id "modal-name"
+               :class "form-control"
+               :required true
+               :value (:name category)
+               :size 10
+               :data-id (:id category)
+               :on-change #(rf/dispatch [::continue-editing {:name (-> % .-target .-value)}])}]]
+     [:div {:class "form-group form-check"}
+      [:input {:type "checkbox"
+               :id "modal-retired"
+               :class "form-check-input"
+               :checked (:retired category)
+               :on-change #(rf/dispatch [::continue-editing {:retired (-> % .-target .-checked)}])}]
+      [:label {:class "form-check-label", :for "modal-retired"} "Retired"]
+      [:small {:class "form-text text-muted"}
+       "Retired categories will not be offered for new transactions."]]]))
+
+
 (defn ^:private category-item [{:keys [id name retired] :as category} editing?]
   [:li
     (if editing?
       [:input {:type "text", :size 10, :value name, :data-id id
-               :on-change edit-name, :on-blur update-name}]
-      [:span {:on-click #(rf/dispatch [::begin-editing {:id id, :name name}])}
+               :on-change name-changed, :on-blur update-name}]
+      [:span {:on-click #(rf/dispatch [::begin-editing category])}
         (if retired [:i name] name)])])
 
 
@@ -153,8 +191,8 @@
   [:div
    [:h2 "Categories"]
    [:ul
-    (let [editing @(rf/subscribe [::editing])]
+    ;(let [editing @(rf/subscribe [::editing])]
       (for [category @(rf/subscribe [::sorted])]
-        (if (= (:id editing) (:id category))
-          ^{:key (:id category)} [category-item editing true]
-          ^{:key (:id category)} [category-item category false])))]])
+        ;(if (= (:id editing) (:id category))
+        ;  ^{:key (:id category)} [category-item editing true]
+          ^{:key (:id category)} [category-item category false])]])

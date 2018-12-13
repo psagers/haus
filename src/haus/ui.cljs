@@ -40,7 +40,8 @@
 
 (defn ^:private initial-db []
   {:route {:handler ::initial}  ; bidi route
-   :page {}                     ; Scratch space for the current route
+   :page {}                     ; Volatile state for the current route
+   :modal nil                   ; Bootstrap modal
    :categories {}               ; categories by id
    :people {}})                 ; people by id
 
@@ -78,7 +79,31 @@
   ::set-route
   (fn [db [_ route]]
     (assoc db :route route
-              :page {})))
+              :page {}
+              :modal nil)))
+
+
+(rf/reg-event-db
+  ::modal-begin
+  (fn [db [_ title body & {:keys [on-cancel on-save]}]]
+    (assoc db :modal {:title title
+                      :body body
+                      :on-cancel on-cancel
+                      :on-save on-save})))
+
+
+(rf/reg-event-fx
+  ::modal-cancel
+  (fn [{:keys [db]} _]
+    {:db (assoc db :modal nil)
+     :dispatch-n (list (get-in db [:modal :on-cancel]))}))
+
+
+(rf/reg-event-fx
+  ::modal-save
+  (fn [{:keys [db]} _]
+    {:db (assoc db :modal nil)
+     :dispatch-n (list (get-in db [:modal :on-save]))}))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -87,6 +112,7 @@
 
 (rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub ::page (fn [db _] (:page db)))
+(rf/reg-sub ::modal (fn [db _] (:modal db)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -101,15 +127,41 @@
 
 
 (defn root []
-  [:div {:class "container"}
-   [:div {:class "row"}
-    [:div {:class "col"} [:a {:href "/"} "Home"]]
-    [:div {:class "col"} [:a {:href "/categories"} "Categories"]]
-    [:div {:class "col"} [:a {:href "/bogus"} "Not found"]]]
-   [:div {:class "row"}
-    [:div {:class "col"}
-     [:h1 "Haus"]
-     [views/content @(rf/subscribe [::route])]]]])
+  (let [modal @(rf/subscribe [::modal])]
+    [:div
+     [:div {:class "container"}
+      [:div {:class "row"}
+       [:div {:class "col"} [:a {:href "/"} "Home"]]
+       [:div {:class "col"} [:a {:href "/categories"} "Categories"]]
+       [:div {:class "col"} [:a {:href "/bogus"} "Not found"]]]
+      [:div {:class "row"}
+       [:div {:class "col"}
+        [:h1 "Haus"]
+        [views/content @(rf/subscribe [::route])]]]]
+
+     (if modal
+       [:div {:class "modal show"
+              :style {:display "block"}}
+        [:div {:class "modal-dialog"}
+         [:div {:class "modal-content"}
+          [:div {:class "modal-header"}
+           [:h5 {:class "modal-tital"} (:title modal)]
+           [:button {:type "button", :class "close"
+                     :on-click #(rf/dispatch [::modal-cancel])}
+            [:span {:aria-hidden "true"} "×"]]]
+          [:div {:class "modal-body"}
+           (:body modal)]
+          [:div {:class "modal-footer"}
+           [:button {:type "button", :class "btn btn-secondary"
+                     :on-click #(rf/dispatch [::modal-cancel])}
+            "Cancel"]
+           [:button {:type "button", :class "btn btn-primary"
+                     :on-click #(rf/dispatch [::modal-save])}
+            "Save"]]]]])
+
+     (if modal
+       [:div {:class "modal-backdrop show"
+              :on-click #(rf/dispatch [::modal-cancel])}])]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -120,4 +172,8 @@
   (rf/dispatch-sync [::initialize])
   (pushy/start! history)
 
+  (reagent/render [root] (js/document.getElementById "app")))
+
+
+(defn ^:dev/after-load reinstall-root []
   (reagent/render [root] (js/document.getElementById "app")))
