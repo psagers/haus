@@ -40,6 +40,7 @@
 
 (defn ^:private initial-db []
   {:route {:handler ::initial}  ; bidi route
+   :page {}                     ; Scratch space for the current route
    :categories {}               ; categories by id
    :people {}})                 ; people by id
 
@@ -72,20 +73,20 @@
   events/route-leave-fx)
 
 
+; Changing the route automatically resets the :page key as well.
 (rf/reg-event-db
   ::set-route
   (fn [db [_ route]]
-    (assoc db :route route)))
+    (assoc db :route route
+              :page {})))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Subscriptions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(rf/reg-sub
-  ::route
-  (fn [db _]
-    (:route db)))
+(rf/reg-sub ::route (fn [db _] (:route db)))
+(rf/reg-sub ::page (fn [db _] (:page db)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
