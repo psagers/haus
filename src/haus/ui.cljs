@@ -2,11 +2,13 @@
   (:require [clojure.string :as str]
             [bidi.bidi :as bidi]
             [haus.ui.categories :as categories]
+            [haus.ui.modal :as modal]
             [haus.ui.util.events :as events]
             [haus.ui.util.views :as views]
             [pushy.core :as pushy]
             [re-frame.core :as rf]
             [re-graph.core :as re-graph]
+            [re-pressed.core :as rp]
             [reagent.core :as reagent]))
 
 
@@ -40,6 +42,7 @@
 
 (defn ^:private initial-db []
   {:route {:handler ::initial}  ; bidi route
+   :navbar {:expanded? false}
    :page {}                     ; Volatile state for the current route
    :modal nil                   ; Bootstrap modal
    :categories {}               ; categories by id
@@ -51,7 +54,8 @@
   (fn [_ _]
     (let [db (initial-db)]
       {:db db
-       :dispatch-n (list [::re-graph/init :haus]
+       :dispatch-n (list [::rp/add-keyboard-event-listener "keydown"]
+                         [::re-graph/init :haus]
                          categories/subscribe-event)})))
 
 
@@ -74,36 +78,21 @@
   events/route-leave-fx)
 
 
-; Changing the route automatically resets the :page key as well.
+; Changing the route automatically resets various other attributes.
 (rf/reg-event-db
   ::set-route
   (fn [db [_ route]]
-    (assoc db :route route
-              :page {}
-              :modal nil)))
+    (-> db
+        (assoc :route route
+               :page {}
+               :modal nil)
+        (assoc-in [:navbar :expanded?] false))))
 
 
 (rf/reg-event-db
-  ::modal-begin
-  (fn [db [_ title body & {:keys [on-cancel on-save]}]]
-    (assoc db :modal {:title title
-                      :body body
-                      :on-cancel on-cancel
-                      :on-save on-save})))
-
-
-(rf/reg-event-fx
-  ::modal-cancel
-  (fn [{:keys [db]} _]
-    {:db (assoc db :modal nil)
-     :dispatch-n (list (get-in db [:modal :on-cancel]))}))
-
-
-(rf/reg-event-fx
-  ::modal-save
-  (fn [{:keys [db]} _]
-    {:db (assoc db :modal nil)
-     :dispatch-n (list (get-in db [:modal :on-save]))}))
+  ::toggle-navbar
+  (fn [db _]
+    (update-in db [:navbar :expanded?] not)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -112,7 +101,7 @@
 
 (rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub ::page (fn [db _] (:page db)))
-(rf/reg-sub ::modal (fn [db _] (:modal db)))
+(rf/reg-sub ::navbar (fn [db _] (:navbar db)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -123,57 +112,59 @@
   ())
 
 (defmethod views/content ::home [_]
-  [:h2 "Home"])
+  [:div {:class "content"}
+   [:h2 "Home"]])
+
+
+(defn ^:private navbar-brand []
+  (let [{:keys [expanded?]} @(rf/subscribe [::navbar])]
+    [:div {:class "navbar-brand"}
+     [:a {:class (str "navbar-burger burger" (if expanded? " is-active"))
+          :on-click #(rf/dispatch [::toggle-navbar])}
+      [:span {:aria-hidden true}]
+      [:span {:aria-hidden true}]
+      [:span {:aria-hidden true}]]]))
+
+
+(defn ^:private nav-link
+  [label handler & params]
+  (let [{current :handler} @(rf/subscribe [::route])
+        path (apply bidi/path-for routes handler params)]
+    [:a {:class (str "navbar-item" (if (= current handler) " is-active"))
+         :href path}
+     label]))
+
+
+(defn ^:private navbar-menu []
+  (let [{:keys [expanded?]} @(rf/subscribe [::navbar])]
+    [:div {:class (str "navbar-menu" (if expanded? " is-active"))}
+     [:div {:class "navbar-start"}
+      [nav-link "Home" ::home]
+      [nav-link "Categories" ::categories/index]]
+     [:div {:class "navbar-end"}]]))
 
 
 (defn root []
-  (let [modal @(rf/subscribe [::modal])]
-    [:div
+  [:div
+    [:nav {:class "navbar is-dark"}
      [:div {:class "container"}
-      [:div {:class "row"}
-       [:div {:class "col"} [:a {:href "/"} "Home"]]
-       [:div {:class "col"} [:a {:href "/categories"} "Categories"]]
-       [:div {:class "col"} [:a {:href "/bogus"} "Not found"]]]
-      [:div {:class "row"}
-       [:div {:class "col"}
-        [:h1 "Haus"]
-        [views/content @(rf/subscribe [::route])]]]]
-
-     (if modal
-       [:div {:class "modal show"
-              :style {:display "block"}}
-        [:div {:class "modal-dialog"}
-         [:div {:class "modal-content"}
-          [:div {:class "modal-header"}
-           [:h5 {:class "modal-tital"} (:title modal)]
-           [:button {:type "button", :class "close"
-                     :on-click #(rf/dispatch [::modal-cancel])}
-            [:span {:aria-hidden "true"} "×"]]]
-          [:div {:class "modal-body"}
-           (:body modal)]
-          [:div {:class "modal-footer"}
-           [:button {:type "button", :class "btn btn-secondary"
-                     :on-click #(rf/dispatch [::modal-cancel])}
-            "Cancel"]
-           [:button {:type "button", :class "btn btn-primary"
-                     :on-click #(rf/dispatch [::modal-save])}
-            "Save"]]]]])
-
-     (if modal
-       [:div {:class "modal-backdrop show"
-              :on-click #(rf/dispatch [::modal-cancel])}])]))
+      [navbar-brand]
+      [navbar-menu]]]
+    [:section {:class "section"}
+     [:div {:class "container"}
+       [views/content @(rf/subscribe [::route])]]]
+    [modal/view]])
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; App & initialization
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn ^:dev/after-load install-root []
+  (reagent/render [root] (js/document.getElementById "app")))
+
+
 (defn ^:export run []
   (rf/dispatch-sync [::initialize])
   (pushy/start! history)
-
-  (reagent/render [root] (js/document.getElementById "app")))
-
-
-(defn ^:dev/after-load reinstall-root []
-  (reagent/render [root] (js/document.getElementById "app")))
+  (install-root))

@@ -35,14 +35,13 @@
                  [com.walmartlabs/lacinia "0.31.0-rc-1"]
                  [com.walmartlabs/lacinia-pedestal "0.11.0-rc-1"]
 
-
                  ; HTTP
                  [io.pedestal/pedestal.service "0.5.4" :exclusions [org.clojure/tools.analyzer.jvm]]
                  [io.pedestal/pedestal.jetty "0.5.4"]
                  [ring/ring-spec "0.0.4"]
+                 [hiccup "1.0.5"]
 
                  ; Misc
-                 [hiccup "1.0.5"]
                  [com.taoensso/truss "1.5.0"]
                  [slingshot "0.12.2"]
                  [failjure "1.3.0"]]

@@ -1,13 +1,18 @@
 {
   "dependencies": {
     "create-react-class": "^15.6.3",
+    "jquery": "^3.3.1",
     "react": "^16.6.3",
     "react-dom": "^16.6.3"
   },
   "devDependencies": {
+    "autoprefixer": "^9.4.2",
+    "brunch": "^2.10.17",
     "highlight.js": "^9.13.1",
+    "postcss-brunch": "^2.10.1",
     "react-flip-move": "^3.0.3",
     "react-highlight.js": "^1.0.7",
+    "sass-brunch": "^2.10.7",
     "shadow-cljs": "^2.7.6"
   },
   "scripts": {
