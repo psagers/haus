@@ -112,15 +112,15 @@
   ())
 
 (defmethod views/content ::home [_]
-  [:div {:class "content"}
+  [:div.content
    [:h2 "Home"]])
 
 
 (defn ^:private navbar-brand []
   (let [{:keys [expanded?]} @(rf/subscribe [::navbar])]
-    [:div {:class "navbar-brand"}
-     [:a {:class (str "navbar-burger burger" (if expanded? " is-active"))
-          :on-click #(rf/dispatch [::toggle-navbar])}
+    [:div.navbar-brand
+     [:a.navbar-burger.burger {:class (if expanded? "is-active")
+                               :on-click #(rf/dispatch [::toggle-navbar])}
       [:span {:aria-hidden true}]
       [:span {:aria-hidden true}]
       [:span {:aria-hidden true}]]]))
@@ -130,28 +130,28 @@
   [label handler & params]
   (let [{current :handler} @(rf/subscribe [::route])
         path (apply bidi/path-for routes handler params)]
-    [:a {:class (str "navbar-item" (if (= current handler) " is-active"))
-         :href path}
+    [:a.navbar-item {:class (if (= current handler) "is-active")
+                     :href path}
      label]))
 
 
 (defn ^:private navbar-menu []
   (let [{:keys [expanded?]} @(rf/subscribe [::navbar])]
-    [:div {:class (str "navbar-menu" (if expanded? " is-active"))}
-     [:div {:class "navbar-start"}
+    [:div.navbar-menu {:class (if expanded? "is-active")}
+     [:div.navbar-start
       [nav-link "Home" ::home]
       [nav-link "Categories" ::categories/index]]
-     [:div {:class "navbar-end"}]]))
+     [:div.navbar-end]]))
 
 
 (defn root []
   [:div
-    [:nav {:class "navbar is-dark"}
-     [:div {:class "container"}
+    [:nav.navbar.is-dark
+     [:div.container
       [navbar-brand]
       [navbar-menu]]]
-    [:section {:class "section"}
-     [:div {:class "container"}
+    [:section.section
+     [:div.container
        [views/content @(rf/subscribe [::route])]]]
     [modal/view]])
 

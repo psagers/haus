@@ -21,6 +21,7 @@
   :Category
   {:fields {:id {:type (non-null ObjectId), :resolve :_id}
             :name {:type (non-null String)}
+            :description {:type String}
             :retired {:type Boolean}}}
 
   :PersonEvent
@@ -94,18 +95,20 @@
 
  :mutations
  {:new_category
-  {:args {:name {:type (non-null Name)}}
+  {:args {:name {:type (non-null Name)}
+          :description {:type String}}
    :type :Category
    :resolve :mutations/new-category}
 
   :update_category
   {:args {:id {:type (non-null ObjectId)}
           :name {:type Name}
+          :description {:type String}
           :retired {:type Boolean}}
    :type :Category
    :resolve :mutations/update-category}
 
   :delete_category
   {:args {:id {:type (non-null ObjectId)}}
-   :type (non-null Boolean)
+   :type ObjectId
    :resolve :mutations/delete-category}}}

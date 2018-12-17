@@ -6750,5 +6750,11 @@ label.panel-block {
   .modal-card {
     width: auto; } }
 
+.modal-card-foot {
+  display: block; }
+
+.justify-content-end {
+  justify-content: flex-end; }
+
 
 /*# sourceMappingURL=haus.css.map*/

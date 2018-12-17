@@ -91,7 +91,7 @@
   [conn coll-name args]
   (let [id (:id args)
         ch (sub/first (collection/delete-one! conn coll-name {:_id id}))]
-    (-> (async/map #(some-> % :count (> 0)) [ch])
+    (-> (async/map #(if (> (get % :count 0) 0) id) [ch])
         (channel->result))))
 
 

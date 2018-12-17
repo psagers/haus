@@ -1,11 +1,14 @@
 (ns haus.ui.categories
-  (:require [haus.ui.util :refer [map-by]]
+  (:require [clojure.string :as str]
+            [haus.ui.util :refer [map-by]]
             [haus.ui.util.events :as events]
             [haus.ui.util.forms :as forms]
+            [haus.ui.modal :as modal]
             [haus.ui.util.routes :refer [object-id]]
             [haus.ui.util.views :as views]
             [re-frame.core :as rf]
-            [re-graph.core :as re-graph]))
+            [re-graph.core :as re-graph]
+            [reagent.core :as r]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -14,9 +17,9 @@
 
 (def subscribe-event
   [::re-graph/subscribe :haus ::stream
-   "{categories{action docs{id name retired} ids}}"
+   "{categories{action docs{id name description retired} ids}}"
    {}
-   [::update!]])
+   [::on-subscription-event]])
 
 
 ; Probably never used.
@@ -24,14 +27,34 @@
   [::re-graph/unsubscribe :haus ::stream])
 
 
+(defn new-event [vars]
+  [::re-graph/mutate
+   :haus
+   "mutation NewCategory($name: Name!, $description: String) {
+      new_category(name: $name, description: $description)
+        {id name description retired}
+   }"
+   vars
+   [::on-new-response]])
+
+
 (defn update-event [vars]
   [::re-graph/mutate
    :haus
-   "mutation UpdateCategory($id: ObjectId!, $name: Name, $retired: Boolean) {
-      update_category(id: $id, name: $name, retired: $retired) {id name retired}
+   "mutation UpdateCategory($id: ObjectId!, $name: Name, $description: String, $retired: Boolean) {
+      update_category(id: $id, name: $name, description: $description, retired: $retired)
+        {id name description retired}
    }"
    vars
    [::on-update-response]])
+
+
+(defn delete-event [vars]
+  [::re-graph/mutate
+   :haus
+   "mutation DeleteCategory($id: ObjectId!) {delete_category(id: $id)}"
+   vars
+   [::on-delete-response]])
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -45,7 +68,8 @@
 ; Make sure the subscription is up and running on entry. This should be
 ; redundant.
 (defmethod events/route-enter-fx ::index [{:keys [db]} _]
-  {:db (assoc db :page {:tab :active})
+  {:db (assoc db :page {:tab :active
+                        :form nil})
    :dispatch subscribe-event})
 
 
@@ -54,7 +78,61 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (rf/reg-event-db
-  ::update!
+  ::set-tab
+  (fn [db [_ tab]]
+    (assoc-in db [:page :tab] tab)))
+
+
+;
+; Modal forms
+;
+
+(declare modal-body modal-buttons)
+
+(rf/reg-event-fx
+  ::begin-modal
+  (fn [{:keys [db]} [_ operation category]]
+    (let [modal {:title (str/capitalize (str (name operation) " category"))
+                 :body [modal-body]
+                 :buttons-right (modal-buttons operation)
+                 :on-close [::end-modal]
+                 :on-enter [::submit-modal]}]
+      {:db (assoc-in db [:page :form] {:operation operation
+                                       :category category
+                                       :waiting? false})
+       :dispatch [::modal/open modal]})))
+
+
+(rf/reg-event-db
+  ::continue-modal
+  (fn [db [_ updates]]
+    (update-in db [:page :form :category] #(merge % updates))))
+
+
+(rf/reg-event-fx
+  ::submit-modal
+  (fn [{:keys [db]} _]
+    (if-some [{:keys [operation category]} (get-in db [:page :form])]
+      {:db (assoc-in db [:page :form :waiting?] true)
+       :dispatch (case operation
+                   (:new) (new-event category)
+                   (:edit) (update-event category)
+                   (:delete) (delete-event category)
+                   [::modal/close])})))
+
+
+(rf/reg-event-db
+  ::end-modal
+  (fn [db _]
+    (assoc-in db [:page :form] nil)))
+
+
+;
+; GraphQL
+;
+
+(rf/reg-event-db
+  ::on-subscription-event
   (fn [db [_ event]]
     (let [{:keys [action docs ids]} (get-in event [:data :categories])]
       (case action
@@ -63,49 +141,31 @@
         ("DELETE") (update-in db [:categories] #(apply dissoc % ids))))))
 
 
-(rf/reg-event-db
-  ::set-tab
-  (fn [db [_ tab]]
-    (assoc-in db [:page :tab] tab)))
-
-
-(declare modal-body)
-
 (rf/reg-event-fx
-  ::begin-editing
-  (fn [{:keys [db]} [_ category]]
-    {:db (assoc-in db [:page :editing] category)
-     :dispatch [:haus.ui.modal/begin "Edit category" [modal-body]
-                                     :on-cancel [::cancel-editing]
-                                     :on-save [::finish-editing]]}))
-
-
-(rf/reg-event-db
-  ::continue-editing
-  (fn [db [_ updates]]
-    (update-in db [:page :editing] #(merge % updates))))
-
-
-(rf/reg-event-db
-  ::cancel-editing
-  (fn [db _]
-    (assoc-in db [:page :editing] nil)))
-
-
-(rf/reg-event-fx
-  ::finish-editing
-  (fn [{:keys [db]} _]
-    (if-some [category (get-in db [:page :editing])]
-      {:db (assoc-in db [:page :editing] nil)
-       :dispatch (update-event category)})))
+  ::on-new-response
+  (fn [{:keys [db]} [_ resp]]
+    (if-some [category (get-in resp [:data :new_category])]
+      {:db (assoc-in db [:categories (:id category)] category)
+       :dispatch [::modal/close]}
+      (js/console.error (clj->js resp)))))
 
 
 (rf/reg-event-fx
   ::on-update-response
   (fn [{:keys [db]} [_ resp]]
     (if-some [category (get-in resp [:data :update_category])]
-      {:db (assoc-in db [:categories (:id category)] category)}
-      {})))  ; TODO: report error?
+      {:db (assoc-in db [:categories (:id category)] category)
+       :dispatch [::modal/close]}
+      (js/console.error (clj->js resp)))))
+
+
+(rf/reg-event-fx
+  ::on-delete-response
+  (fn [{:keys [db]} [_ resp]]
+    (if-some [id (get-in resp [:data :delete_category])]
+      {:db (update-in db [:categories] #(dissoc % :id))
+       :dispatch [::modal/close]}
+      (js/console.error (clj->js resp)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -131,19 +191,8 @@
 (rf/reg-sub
   ::sorted
   :<- [::map]
-  (fn [categories _]
-    (sort-by :name (vals categories))))
-
-
-(rf/reg-sub
-  ::visible
-  :<- [::sorted]
-  (fn [categories [_ tab]]
-    (-> (case tab
-          (:active) (remove :retired categories)
-          (:retired) (filter :retired categories)
-          categories)
-        vec)))
+  (fn [category-map _]
+    (sort-by :name (vals category-map))))
 
 
 ; L3: Individual categories by id.
@@ -154,89 +203,154 @@
     (get categories id)))
 
 
+; L3: Card specification for a single category.
 (rf/reg-sub
-  ::editing
+  ::card
+  (fn [[_ id] _]
+    {:category (rf/subscribe [::get id])
+     :tab (rf/subscribe [::tab])})
+  (fn [{:keys [category tab]} _]
+    {:category category
+     :visible? (if (= tab :retired)
+                 (:retired category)
+                 (not (:retired category)))}))
+
+
+; L3: Current modal state. This is our private representation, not the one
+; managed by haus.ui.modal.
+(rf/reg-sub
+  ::form
   :<- [:haus.ui/page]
   (fn [page _]
-    (:editing page)))
+    (:form page)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Views
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn name-changed [event]
-  (let [value (-> event .-target .-value)]
-    (rf/dispatch [::continue-editing {:name value}])))
+(defn on-input-change [field]
+  (fn [event]
+    (let [value (-> event .-target .-value)]
+      (rf/dispatch [::continue-modal {field value}]))))
+
+(defn on-checkbox-change [field]
+  (fn [event]
+    (let [value (-> event .-target .-checked)]
+      (rf/dispatch [::continue-modal {field value}]))))
 
 
-(defn retired-changed [event]
-  (let [value (-> event .-target .-checked)]
-    (rf/dispatch [::continue-editing {:retired value}])))
+(defn name-input [category]
+  (forms/input "text" (:name category) (on-input-change :name)
+               :attrs {:required true}
+               :label "Name"))
+
+(defn description-input [category]
+  (forms/input "text" (:description category) (on-input-change :description)
+               :label "Description"))
+
+(defn retired-checkbox [category]
+  (forms/checkbox (:retired category) (on-checkbox-change :retired)
+                  :label "Retired"
+                  :help-text "Retired categories will not be offered for new transactions."))
 
 
-(defn update-name [event]
-  (rf/dispatch [::finish-editing]))
+(defmulti -modal-body
+  (fn [operation _] operation))
 
+(defmethod -modal-body :new
+  [_ category]
+  [:div
+   [name-input category]
+   [description-input category]])
+
+(defmethod -modal-body :edit
+  [_ category]
+  [:div
+   [name-input category]
+   [description-input category]
+   [retired-checkbox category]])
+
+(defmethod -modal-body :delete
+  [_ category]
+  [:p.content "Permenently delete " [:b (:name category)] "?"])
+
+(defmethod -modal-body :default
+  [_ _]
+  nil)
 
 (defn modal-body []
-  (let [category @(rf/subscribe [::editing])]
-    [:div
-     (forms/input "text" "form-name" (:name category) name-changed
-                  :attrs {:required true}
-                  :label "Name")
-     (forms/checkbox "form-retired" (:retired category) retired-changed
-                     :label "Retired"
-                     :help-text "Retired categories will not be offered for new transactions.")]))
+  (r/with-let [form (rf/subscribe [::form])]
+    (let [{:keys [operation category]} @form]
+      (-modal-body operation category))))
+
+(defn modal-buttons [operation]
+  [[:a.button.is-grey-light {:on-click #(rf/dispatch [::modal/close])} "Cancel"]
+   (if (= operation :delete)
+     [:a.button.is-danger {:on-click #(rf/dispatch [::submit-modal])} "Delete"]
+     [:a.button.is-primary {:on-click #(rf/dispatch [::submit-modal])} "Save"])])
 
 
-(defn ^:private categories-for-tab [categories tab]
-  (-> (case tab
-        (:active) (remove :retired categories)
-        (:retired) (filter :retired categories)
-        categories)
-      vec))
+(defn ^:private filter-tabs [& args]
+  (r/with-let [tabs (partition 2 args)
+               current-id (rf/subscribe [::tab])]
+    (into [:ul]
+      (for [[tab-id tab-name] tabs]
+        [:li {:class (if (= tab-id @current-id) "is-active")}
+         [:a {:on-click #(rf/dispatch [::set-tab tab-id])} tab-name]]))))
 
-(defn ^:private visible? [category tab]
-  (let [retired? (:retired category)]
-    (if (= tab :active)
-      (not retired?)
-      retired?)))
 
-(defn ^:private category-tab [id name]
-  (let [current @(rf/subscribe [::tab])]
-    [:li {:class (if (= id current) "is-active")}
-     [:a {:on-click #(rf/dispatch [::set-tab id])} name]]))
+(defn header []
+  [:div.level.is-mobile
+   [:div.level-left
+    [:div.level-item
+     [:div.tabs.is-toggle.is-toggle-rounded
+      [filter-tabs :active "Active"
+                   :retired "Retired"]]]]
+   [:div.level-right
+    [:div.level-item
+     [:a.button {:on-click #(rf/dispatch [::begin-modal :new {}])}
+      [:span.icon.is-small [:i.fas.fa-plus]]
+      [:span "New"]]]]])
 
-(defn ^:private category-item [{:keys [id name description retired] :as category}]
-  (let [active-tab @(rf/subscribe [::tab])]
-    [:div {:class (str "column is-one-third is-one-quarter-desktop"
-                       (if-not (visible? category active-tab) " is-hidden"))}
-     [:div {:class "card"}
-      [:header {:class "card-header"}
-        [:p {:class "card-header-title"} name]]
-      [:div {:class "card-content"}
-        [:div {:class "content"}
-         (if description [:p description] [:i "No description"])]]
-      [:div {:class "card-footer"}
-        [:a {:class "card-footer-item"
-             :on-click #(rf/dispatch [::begin-editing category])}
-         "Edit"]]]]))
+
+(defn notification []
+  (r/with-let [tab (rf/subscribe [::tab])]
+    (case @tab
+      (:retired) [:div.notification "Retired categories will not be offered for new transactions."]
+      nil)))
+
+
+(defn ^:private card [id]
+  (r/with-let [card (rf/subscribe [::card id])]
+    (let [{:keys [category visible?]} @card
+          {:keys [name description]} category]
+      [:div.column.is-4.is-3-desktop {:class (when-not visible? "is-hidden")}
+       [:div.card
+        [:header.card-header
+         [:p.card-header-title name]]
+        [:div.card-content
+          [:div.content
+           (if (empty? description)
+             [:i.has-text-grey-light "No description"]
+             [:p description])]]
+        [:div.card-footer
+          [:a.card-footer-item {:on-click #(rf/dispatch [::begin-modal :edit category])}
+           [:span.icon.has-text-dark [:i.fas.fa-pencil-alt]]]
+          [:a.card-footer-item {:on-click #(rf/dispatch [::begin-modal :delete category])}
+           [:span.icon.has-text-dark [:i.far.fa-trash-alt]]]]]])))
+
+
+(defn ^:private cards []
+  (r/with-let [categories (rf/subscribe [::sorted])]
+    (into [:div.columns.is-multiline]
+      (for [{:keys [id]} @categories]
+        ^{:key id} [card id]))))
+
 
 (defmethod views/content ::index [_]
-  (let [active-tab @(rf/subscribe [::tab])
-        categories @(rf/subscribe [::sorted])]
-   [:div
-    [:h1 {:class "title is-hidden-desktop"} "Categories"]
-
-    [:div {:class "tabs is-boxed"}
-     [:ul
-      [category-tab :active "Active"]
-      [category-tab :retired "Retired"]]]
-
-    (if (= active-tab :retired)
-      [:div {:class "notification"} "Retired categories will not be offered for new transactions."])
-
-    [:div {:class "columns is-multiline is-tablet"}
-     (for [category @(rf/subscribe [::sorted])]
-       ^{:key (:id category)} [category-item category])]]))
+  [:div
+   [:h1.title.is-hidden-desktop "Categories"]
+   [header]
+   [notification]
+   [cards]])

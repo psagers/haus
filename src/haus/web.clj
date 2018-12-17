@@ -65,7 +65,11 @@
      [:meta {:name "viewport"
              :content "width=device-width, initial-scale=1"}]
      [:title "Haus"]
-     [:link {:rel "stylesheet" :href "/css/haus.css"}]]
+     [:link {:rel "stylesheet" :href "/css/haus.css"}]
+     [:link {:rel "stylesheet"
+             :href "https://use.fontawesome.com/releases/v5.6.1/css/all.css"
+             :integrity "sha384-gfdkjb5BdAXd+lj+gudLWI+BXq4IuLW5IT+brZEZsLFm++aCMlF1V92rMkPaX4PP"
+             :crossorigin "anonymous"}]]
     [:body
      [:div#app
       [:h1 "Loading app..."]]
